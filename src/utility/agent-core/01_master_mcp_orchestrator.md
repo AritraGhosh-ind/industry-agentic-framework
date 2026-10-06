@@ -120,11 +120,11 @@ const response = await openai.chat.completions.create({ model: "gpt-4o", message
 ### 6.2 Anthropic Claude Reference Layer (Mandatory Comment Envelopes)
 Directly beneath every OpenAI execution block, the agent must output a matching production-ready structure for Anthropic Claude securely wrapped inside gray comment blocks. This ensures complete system portability across enterprise boundary layers:
 ```typescript
-/*
+
 import { Anthropic } from "@anthropic-ai/sdk";
 const anthropic = new Anthropic({ apiKey: process.env.CLAUDE_API_KEY });
 const response = await anthropic.messages.create({ model: "claude-3-5-sonnet-latest", ... });
-*/
+
 ```
 
 ---
