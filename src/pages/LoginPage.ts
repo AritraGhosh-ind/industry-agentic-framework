@@ -7,7 +7,7 @@ import { BaseActions } from '../actions/BaseActions';
  */
 export class LoginPage extends BaseActions {
   // Updated locator to ensure Autopilot Self-Healing!
-  public usernameField: string = "input#feature-b-custom-username-field";
+  public usernameField: string = "input[placeholder='Username']";
 
   public passwordField: string = "input[placeholder='Password']";
   public loginButton: string = "input[type='submit']";

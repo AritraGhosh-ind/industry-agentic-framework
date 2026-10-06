@@ -13,12 +13,26 @@ const openaiClient = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY || 'placeholder-gate-key'
 });
 
-export default class AgentQEHook implements Reporter {
-  private suitePassed: boolean = true;
+// A local state token file path to persist tracking state across execution forks
+const stateTrackerFile = path.resolve('.agent_correction_state.json');
 
+export default class AgentQEHook implements Reporter {
+
+  // Initialize state tracker metrics on fresh execution suites
+  // onBegin() {
+  //   if (fs.existsSync(stateTrackerFile)) {
+  //     fs.unlinkSync(stateTrackerFile); // Clear old state tracking states
+  //   }
+  // }
+
+    // Retain the correction state across runs so the subsequent green verification run can catch it
+  onBegin() {
+    console.log('🔬 [AGENT SYSTEM]: Syncing persistent workspace automation tokens...');
+  }
+
+  
   async onTestEnd(test: TestCase, result: TestResult) {
     if (result.status === 'failed' || result.status === 'timedOut') {
-      this.suitePassed = false; // Mark suite as failed to trigger self-healing loops
       console.log('\n🕵️ [AGENT DETECTED FAILURE]: Initiating live workspace analysis matrix...');
       
       const errorMessage = result.errors?.[0]?.message || '';
@@ -51,10 +65,13 @@ export default class AgentQEHook implements Reporter {
         const selectedRoute = routeResponse.choices?.[0]?.message?.content?.trim() || 'LOCATOR';
         console.log(`🎯 Failure classified dynamically as: ${selectedRoute}`);
 
-        if (selectedRoute.includes('LOCATOR')) {
-          await this.executeAutopilotSelfHealing(errorMessage, stackTrace, systemDirectives);
-        } else {
+        // Set local persistence state token so onEnd knows a self-healing loop successfully ran
+        fs.writeFileSync(stateTrackerFile, JSON.stringify({ correctionApplied: true }));
+
+        if (selectedRoute.includes('BUSINESS_LOGIC')) {
           await this.executeHumanInTheLoopIntercept(errorMessage, stackTrace, systemDirectives);
+        } else {
+          await this.executeAutopilotSelfHealing(errorMessage, stackTrace, systemDirectives);
         }
       } catch (err: any) {
         console.error(`❌ Classification engine failed: ${err.message}`);
@@ -62,9 +79,6 @@ export default class AgentQEHook implements Reporter {
     }
   }
 
-  /**
-   * PATH A: AUTONOMOUS LOCATOR SELF-HEALING
-   */
   private async executeAutopilotSelfHealing(error: string, stack: string, directives: string) {
     console.log('⚡ [AUTOPILOT]: Querying LLM for dynamic semantic locator repair...');
     const targetPageFile = path.resolve('src/pages/LoginPage.ts');
@@ -92,16 +106,13 @@ export default class AgentQEHook implements Reporter {
       if (fixedCode) {
         fixedCode = fixedCode.replace(/```typescript|```ts|```/gi, '').trim();
         fs.writeFileSync(targetPageFile, fixedCode, 'utf8');
-        console.log('✅ [AUTOPILOT]: LoginPage.ts has been dynamically auto-healed via Semantic Context! Re-run test to finish pipeline.');
+        console.log('✅ [AUTOPILOT]: LoginPage.ts has been dynamically auto-healed via Semantic Context! Re-run test to complete pipeline.');
       }
     } catch (e: any) {
       console.error(`❌ Agent healing failed: ${e.message}`);
     }
   }
 
-  /**
-   * PATH B: STRATEGIC BUSINESS LOGIC MISMATCH (UNLIMITED DYNAMIC INTERCEPT MAPPINGS)
-   */
   private async executeHumanInTheLoopIntercept(error: string, stack: string, directives: string) {
     console.log('🎮 [HUMAN-IN-THE-LOOP]: Querying LLM for dynamic solutions menu...');
     
@@ -117,7 +128,6 @@ export default class AgentQEHook implements Reporter {
       
       TASK: Generate a list of tailored options for a human developer to choose from.
       You MUST respond with a valid JSON object matching this exact shape. Do not include markdown formatting wraps.
-      
       {
         "options": [
           {
@@ -167,10 +177,8 @@ export default class AgentQEHook implements Reporter {
       if (selectedStrategy && fs.existsSync(targetSpecFile)) {
         console.log(`\n💾 Applying Option [${userSelectionChoice}] adjustments directly to disk...`);
         let specText = fs.readFileSync(targetSpecFile, 'utf8');
-        
         const cleanRegexPattern = new RegExp(selectedStrategy.textToReplace, 'g');
         specText = specText.replace(cleanRegexPattern, selectedStrategy.replacementText);
-        
         fs.writeFileSync(targetSpecFile, specText, 'utf8');
         console.log('🎉 [SUCCESS]: Spec logic successfully aligned with business model! Re-run test to trigger autonomous Agent Git PR execution loop.');
       }
@@ -181,48 +189,52 @@ export default class AgentQEHook implements Reporter {
   }
 
   /**
-   * REQUIREMENT 10 COMPLIANCE: AUTONOMOUS AGENT VERSION CONTROL & PULL REQUEST ENGINE
-   * Triggers automatically when the complete suite runs to a flawless successful green status.
+   * REQUIREMENT 10 COMPLIANCE: AUTONOMOUS AGENT PULL REQUEST ENGINE
+   * Executes Git operations ONLY after a successful green run that follows a corrective change.
    */
   async onEnd(result: FullResult) {
-    if (this.suitePassed && result.status === 'passed') {
-      console.log('\n🚀 [AGENT EXECUTION ENGINE GREEN]: Commencing Autonomous Git PR Timeline operations...');
+    // Check if the current clean green run was preceded by a self-healing or options change loop
+    const stateExists = fs.existsSync(stateTrackerFile);
+    
+    if (result.status === 'passed' && stateExists) {
+      console.log('\n🚀 [AGENT PASS COMPLETE]: Verification run succeeded following active code correction.');
+      console.log('🐙 [AGENT GIT]: Commencing fully autonomous version control and Pull Request pipeline...');
       
       try {
-        // Fetch current active tracking branch name programmatically
         const activeBranchName = execSync('git rev-parse --abbrev-ref HEAD').toString().trim();
-        console.log(`🐙 [AGENT GIT]: Active working branch detected: ${activeBranchName}`);
         
-        // Stage modified workspace elements
-        console.log('📦 [AGENT GIT]: Staging workspace file buffers...');
+        console.log('📦 Staging adjusted workspace text units...');
         execSync('git add .');
         
-        // Commit ledger adjustments with clean author tagging signatures
-        console.log('💾 [AGENT GIT]: Constructing professional commit ledger record...');
-        execSync(`git commit -m "feat(agent-qe): auto-healed code components and validated green execution state output"`);
+        console.log('💾 Recording pristine commit logs onto ledger tracking index...');
+        execSync(`git commit -m "chore(agent-qe): autonomous repository alignment after successful self-healing verification"`);
         
-        // Push feature stream upstream to the personal remote GitHub repository maps
-        console.log(`📤 [AGENT GIT]: Pushing active stream straight to origin branch: ${activeBranchName}...`);
-        execSync(`git push origin ${activeBranchName}`);
+        console.log(`📤 Executing upstream code transfer loop straight to remote origin branch: ${activeBranchName}...`);
+        execSync(`git push origin ${activeBranchName} --force`);
 
-        // Construct a direct web link using your verified repo specifications to easily finalize or trigger the PR
-        const repositoryWebUrl = "https://github.com";
+        // Requirement 10 Strict Compliance: The Agent uses the official gh cli framework tool to autonomously raise the PR!
+        console.log('🔥 [AGENT AUTOMATION]: Raising live Pull Request wrapper programmatically via GitHub CLI primitives...');
+        const prCreationLog = execSync(
+          `gh pr create --base main --head ${activeBranchName} --title "feat(agent-qe): auto-healed code components verification sweep" --body "This Pull Request was programmatically spawned and raised by the custom framework Agent QE Utility following a successful green execution state validation loop."`
+        ).toString().trim();
+
         console.log('\n======================================================================');
-        console.log('🐙 AUTONOMOUS AGENT GIT PULL REQUEST GENERATION ENGINE');
+        console.log('🐙 SUCCESS: PULL REQUEST AUTOMATION COMPLETE');
         console.log('======================================================================');
-        console.log(`✅ SUCCESS: Agent has staged, committed, and pushed [${activeBranchName}] up to Git!`);
-                console.log(`🔗 DYNAMIC ACTION LINK TO RECONCILE PULL REQUEST:`);
-        console.log(`${repositoryWebUrl}/compare/main...${activeBranchName}?expand=1`);
-        console.log('======================================================================');
-        console.log('🔬 MERGE CONFLICT NOTIFICATION MONITOR: Synchronized.');
-        console.log('👉 [STATUS]: Monitoring upstream merges. Human intervention will be requested if blocks occur.');
+        console.log(`👉 STATUS: Live PR raised autonomously by the framework code!`);
+        console.log(`🔗 PR ACCESS LINK: ${prCreationLog}`);
         console.log('======================================================================\n');
 
+        // Cleanup temporary workspace state token files
+        fs.unlinkSync(stateTrackerFile);
+
       } catch (gitExecutionError: any) {
-        console.error(`\n🚨 [AGENT GIT MERGE NOTIFICATION CRASH]: Upstream conflict parameters mapped!`);
-        console.error(`DETAILS: ${gitExecutionError.message}`);
-        console.error('👉 HUMAN ASSISTANCE REQUIRED: Please resolve conflicting code lines manually via VS Code Git tool tabs.\n');
+        console.log('\n🚨 [AGENT GIT MERGE CONFLICT NOTIFICATION]: Upstream block detected!');
+        console.log(`DETAILS: ${gitExecutionError.message}`);
+        console.log('👉 HUMAN INTERVENTION REQUIRED: Please open your Git panels to resolve colliding rows manually.\n');
       }
+    } else if (result.status === 'passed') {
+      console.log('\n✨ [RUN COMPLETION]: Ordinary test sweep passed cleanly. No corrections were needed, skipping automated Git operations.');
     }
   }
 }
