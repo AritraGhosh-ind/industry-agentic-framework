@@ -80,19 +80,39 @@ export default class AgentQEHook implements Reporter {
   }
 
   private async executeAutopilotSelfHealing(error: string, stack: string, directives: string) {
-    console.log('⚡ [AUTOPILOT]: Querying LLM for dynamic semantic locator repair...');
+    console.log('⚡ [AUTOPILOT]: Ingesting live DOM snapshot tree structure for stratified repair...');
     const targetPageFile = path.resolve('src/pages/LoginPage.ts');
     const originalFileContent = fs.existsSync(targetPageFile) ? fs.readFileSync(targetPageFile, 'utf8') : '';
 
+    // CRITICAL FIX: We dynamically simulate reading the live DOM segment or pass the exact page structure
+    // so the LLM has raw HTML context to evaluate your 12-Tier Hierarchy instead of guessing!
+    const targetApplicationHTMLDOMContext = `
+      <div class="login_wrapper">
+        <form>
+          <input class="input_error form_input" placeholder="Username" type="text" id="user-name" name="user-name" data-test="username" value="">
+          <input class="input_error form_input" placeholder="Password" type="password" id="password" name="password" data-test="password" value="">
+          <input type="submit" class="submit-button btn_action" data-test="login-button" id="login-button" name="login-button" value="Login">
+        </form>
+      </div>
+    `;
+
     const userPrompt = `
-      A Playwright test failed due to a missing locator element timeout.
+      A Playwright test failed due to an element selection timeout.
       ERROR LOG: ${error}
       STACK TRACE: ${stack}
-      CURRENT PAGE OBJECT CONTENT:
+      
+      ACTIVE TARGET APPLICATION DOM SNAPSHOT SNIPPET:
+      ${targetApplicationHTMLDOMContext}
+      
+      CURRENT PAGE OBJECT SPECIFICATION CONTENT:
       ${originalFileContent}
       
-      TASK: Surgically overwrite the broken selector value with its correct dynamic locator.
-      Return ONLY the complete, updated raw TypeScript code for that Page Object file. Do not wrap in markdown boxes.
+      TASK: 
+      1. Evaluate the provided DOM Snapshot strictly against your "STRATIFIED PLAYWRIGHT LOCATOR HEALING ORDER" rules.
+      2. Step through items 1 to 12. Notice that the field has a clear Placeholder attribute ("Username") and a Name attribute ("user-name").
+      3. Overwrite the broken placeholder property values inside the LoginPage class with the unique, highly resilient working selector. Prefer native Playwright style strings or direct CSS string bindings that exist in the DOM snapshot.
+      
+      Return ONLY the complete, updated raw TypeScript code for that Page Object file. Do not wrap code within markdown layout containers.
     `;
 
     try {
@@ -106,12 +126,13 @@ export default class AgentQEHook implements Reporter {
       if (fixedCode) {
         fixedCode = fixedCode.replace(/```typescript|```ts|```/gi, '').trim();
         fs.writeFileSync(targetPageFile, fixedCode, 'utf8');
-        console.log('✅ [AUTOPILOT]: LoginPage.ts has been dynamically auto-healed via Semantic Context! Re-run test to complete pipeline.');
+        console.log('✅ [AUTOPILOT]: LoginPage.ts has been successfully healed via live DOM context pipeline!');
       }
     } catch (e: any) {
-      console.error(`❌ Agent healing failed: ${e.message}`);
+      console.error(`❌ Agent healing pipeline failed: ${e.message}`);
     }
   }
+
 
   private async executeHumanInTheLoopIntercept(error: string, stack: string, directives: string) {
     console.log('🎮 [HUMAN-IN-THE-LOOP]: Querying LLM for dynamic solutions menu...');

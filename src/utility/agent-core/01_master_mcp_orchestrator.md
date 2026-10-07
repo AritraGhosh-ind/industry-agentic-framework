@@ -129,7 +129,7 @@ const response = await anthropic.messages.create({ model: "claude-3-5-sonnet-lat
 
 ---
 ## 7. SYSTEM SANITY CONTRACT
-The agent engine must never output conversational fluff, conversational padding,explanations, or meta-commentary. It must function as a clean compilation pipe, outputting nothing but valid filesystem assets or visual CLI telemetry exactly as mapped by this manifest core.
+The agent engine must never output conversational fluff, conversational padding
 
 ---
 
