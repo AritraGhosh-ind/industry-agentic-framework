@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from '../fixtures/test';
 import { LoginPage } from '../pages/LoginPage';
 
 /**
@@ -23,7 +23,7 @@ test.describe('Enterprise E2E Authentication Flow Suite', () => {
     // Layout Validation: Ensure the product catalog landing elements are fully visible
     const productHeader = page.locator("span.title:has-text('Products')");
     await expect(productHeader).toBeVisible({ timeout: 10000 });
-    await expect(productHeader).toHaveText('Products');
+    await expect(productHeader).toHaveText('akdkhkjh');
 
     
     console.log('[STEP RUNNER]: Test Case TC_001 successfully executed and verified green.');
