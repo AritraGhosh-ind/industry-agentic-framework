@@ -7,11 +7,11 @@ import { BaseActions } from '../actions/BaseActions';
  */
 export class LoginPage extends BaseActions {
   // Updated locator to ensure Autopilot Self-Healing!
-  public usernameField: string = "input[placeholder='Username']";
+  public usernameField: string = "role=textbox[name=\"Username\"]";
 
   // Corrected dynamic locator for password field
   public passwordField: string = "input[type='password']";
-  public loginButton: string = "input[type='submit']";
+  public loginButton: string = 'role=button[name="Login"]';
 
   constructor(page: Page, context: BrowserContext) {
     super(page, context);
