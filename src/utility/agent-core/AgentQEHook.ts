@@ -329,10 +329,6 @@ async function executeHumanInTheLoopInterceptClaude(error: string, stack: string
         console.log('📦 Staging adjusted workspace text units...');
         execSync('git add .');
         
-        // =======================================================================
-        // 🔒 INDUSTRIAL WORKSPACE GUARD (ZERO-FAILURE WORKING TREE SCANNER)
-        // Only executes git commit if there are active, uncommitted changes present.
-        // =======================================================================
         const workspaceStatus = execSync('git status --porcelain').toString().trim();
         if (workspaceStatus.length > 0) {
           console.log('💾 Recording pristine commit logs onto ledger tracking index...');
@@ -359,36 +355,64 @@ async function executeHumanInTheLoopInterceptClaude(error: string, stack: string
 
         console.log('🔥 [AGENT AUTOMATION]: Dispatching native asynchronous network frame to create GitHub Pull Request...');
         
-        // FIXED REST ENDPOINT ROUTE: Standardizes variable concatenation to hit the correct REST API schema
-        const response = await fetch(`https://github.com{cleanRepoPath}/pulls`, {
+        // =======================================================================
+        // 🔒 INDUSTRIAL HTTPS WEB CONNECTOR (ZERO-FETCH SECURE PIPELINE)
+        // Replaces temperamental global fetch with native Node.js core request streams.
+        // =======================================================================
+        const https = require('node:https');
+        
+        const postData = JSON.stringify({
+          title: `feat(agent-qe): auto-healed code components verification sweep (${activeBranchName})`,
+          body: 'This Pull Request was programmatically spawned and raised by the custom framework Agent QE Utility following a successful green execution state validation loop.',
+          head: activeBranchName,
+          base: 'main'
+        });
+
+        const options = {
+          hostname: '://github.com',
+          port: 443,
+          path: `/repos/${cleanRepoPath}/pulls`,
           method: 'POST',
           headers: {
             'Authorization': `token ${apiToken}`,
             'Accept': 'application/vnd.github.v3+json',
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({
-            title: `feat(agent-qe): auto-healed code components verification sweep (${activeBranchName})`,
-            body: 'This Pull Request was programmatically spawned and raised by the custom framework Agent QE Utility following a successful green execution state validation loop.',
-            head: activeBranchName,
-            base: 'main'
-          })
+            'Content-Type': 'application/json',
+            'User-Agent': 'Agent-QE-Utility-Framework' // REQUIRED by GitHub to pass API gates securely
+          }
+        };
+
+        const apiRequestPromise = new Promise<void>((resolve, reject) => {
+          const req = https.request(options, (res: any) => {
+            let body = '';
+            res.on('data', (chunk: any) => body += chunk);
+            res.on('end', () => {
+              try {
+                const prData = JSON.parse(body);
+                if ((res.statusCode === 200 || res.statusCode === 201) && prData.html_url) {
+                  console.log('\n======================================================================');
+                  console.log('🐙 SUCCESS: PULL REQUEST AUTOMATION COMPLETE (VIA NATIVE HTTPS CORE)');
+                  console.log('======================================================================');
+                  console.log(`👉 STATUS: Live PR raised autonomously by the framework backend!`);
+                  console.log(`🔗 PR ACCESS LINK: ${prData.html_url}`);
+                  console.log('======================================================================\n');
+                  resolve();
+                } else {
+                  console.log(`\n❌ [API ERROR]: GitHub rejected the PR payload. Code: ${res.statusCode}. Reason: ${prData.message || body}`);
+                  console.log(`🔗 [FALLBACK]: Try navigating to: https://github.com{cleanRepoPath}/compare/main...${activeBranchName}?expand=1`);
+                  resolve();
+                }
+              } catch (e) {
+                reject(new Error(`Failed to parse API response stream: ${body}`));
+              }
+            });
+          });
+
+          req.on('error', (e: any) => reject(e));
+          req.write(postData);
+          req.end();
         });
 
-        const prData: any = await response.json();
-
-        if (response.ok && prData.html_url) {
-          console.log('\n======================================================================');
-          console.log('🐙 SUCCESS: PULL REQUEST AUTOMATION COMPLETE (VIA NATIVE WEB API)');
-          console.log('======================================================================');
-          console.log(`👉 STATUS: Live PR raised autonomously by the framework backend!`);
-          console.log(`🔗 PR ACCESS LINK: ${prData.html_url}`);
-          console.log('======================================================================\n');
-        } else {
-          console.log(`\n❌ [API ERROR]: GitHub rejected the PR payload. Reason: ${prData.message || JSON.stringify(prData)}`);
-          console.log(`🔗 [FALLBACK]: Try navigating to: https://github.com{cleanRepoPath}/compare/main...${activeBranchName}?expand=1`);
-        }
-
+        await apiRequestPromise;
         fs.unlinkSync(stateTrackerFile);
 
       } catch (gitExecutionError: any) {
@@ -400,7 +424,4 @@ async function executeHumanInTheLoopInterceptClaude(error: string, stack: string
       console.log('\n✨ [RUN COMPLETION]: Ordinary test sweep passed cleanly. No corrections were needed, skipping automated Git operations.');
     }
   }
-
-
-
 }
