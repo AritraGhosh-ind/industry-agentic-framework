@@ -106,6 +106,9 @@ export default class AgentQEHook implements Reporter {
         liveApplicationHTMLContext = `Contextual Error Snapshot:\n${errorMessage}`;
       }
 
+
+
+
       
       const manifestPath = path.join(__dirname, '01_master_mcp_orchestrator.md');
       const systemDirectives = fs.existsSync(manifestPath) 
@@ -167,11 +170,12 @@ export default class AgentQEHook implements Reporter {
       1. Review the "STRATIFIED PLAYWRIGHT LOCATOR HEALING ORDER" inside your system manual. You must strictly match element attributes using that 1-12 sequence hierarchy.
       2. COMPILATION SAFETY SAFEGUARD: Notice that the properties in this target file are typed as simple strings (e.g., public usernameField: string = ...). You are FORBIDDEN from wrapping selectors in "this.page.getBy..." method chains because locator objects cannot be assigned to string fields!
       3. Format your updated assignments strictly as operational locator strings. If a native Playwright criterion fits (like placeholder or role), use the internal string format or highly precise attribute selectors that seamlessly match a string field typing (e.g., "input[placeholder='Username']", "input[type='submit']", etc.).
+      4. STRICT ASSERTION PROTECTION SHIELD: You are completely FORBIDDEN from altering, correcting, or touching any assertion statements, business logic checks, or verification text expectations (such as .toHaveText(), .toContainText(), or expect values). Only heal the broken structural selector paths or property variable string definitions. Leave all assertion text expectations exactly as they are currently written!
       
       TASK:
       1. Analyze the ENTIRE target file text code layer simultaneously.
       2. Cross-reference EVERY element locator property string variable definition in this class against the HTML snapshot context provided in the system message.
-      3. Surgically overwrite ALL broken or drifted locator string values inside this file with their updated, compilation-safe parameters. Leave surrounding architecture, signatures, and constructor blocks completely untouched.
+      3. Surgically overwrite ONLY broken or drifted locator string values inside this file with their updated, compilation-safe parameters. Leave surrounding architecture, signatures, constructor blocks, and assertion text checks completely untouched.
       
       Return ONLY the complete, updated raw TypeScript code for this target file. Do not wrap code blocks within markdown container boxes.
     `;
