@@ -350,13 +350,13 @@ async function executeHumanInTheLoopInterceptClaude(error: string, stack: string
         const domainKeyword = 'github.com';
         const keywordIndex = remoteUrl.indexOf(domainKeyword);
         if (keywordIndex !== -1) {
-          // Grabs everything past "github.com", replacing separating characters or trailing extensions cleanly
           let rawPathSegment = remoteUrl.substring(keywordIndex + domainKeyword.length);
           if (rawPathSegment.startsWith('/') || rawPathSegment.startsWith(':')) {
             rawPathSegment = rawPathSegment.substring(1);
           }
           cleanRepoPath = rawPathSegment.replace(/\.git\$/, '').trim();
         }
+
 
         const apiToken = process.env.GITHUB_TOKEN;
         
