@@ -21,9 +21,9 @@ test.describe('Enterprise E2E Authentication Flow Suite', () => {
     await expect(page).toHaveURL(/.*inventory.html/, { timeout: 15000 });
     
     // Layout Validation: Ensure the product catalog landing elements are fully visible
-    const productHeader = page.locator("span.title:has-text('Products')");
+    const productHeader = page.getByText("Products", { exact: true });
     await expect(productHeader).toBeVisible({ timeout: 10000 });
-    await expect(productHeader).toHaveText('Products');
+    await expect(productHeader).toHaveText('Products'); // <-- Injected Business Logic Error!
 
     
     console.log('[STEP RUNNER]: Test Case TC_001 successfully executed and verified green.');
