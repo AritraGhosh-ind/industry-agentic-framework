@@ -106,6 +106,9 @@ export default class AgentQEHook implements Reporter {
         liveApplicationHTMLContext = `Contextual Error Snapshot:\n${errorMessage}`;
       }
 
+
+
+
       
       const manifestPath = path.join(__dirname, '01_master_mcp_orchestrator.md');
       const systemDirectives = fs.existsSync(manifestPath) 
@@ -167,11 +170,12 @@ export default class AgentQEHook implements Reporter {
       1. Review the "STRATIFIED PLAYWRIGHT LOCATOR HEALING ORDER" inside your system manual. You must strictly match element attributes using that 1-12 sequence hierarchy.
       2. COMPILATION SAFETY SAFEGUARD: Notice that the properties in this target file are typed as simple strings (e.g., public usernameField: string = ...). You are FORBIDDEN from wrapping selectors in "this.page.getBy..." method chains because locator objects cannot be assigned to string fields!
       3. Format your updated assignments strictly as operational locator strings. If a native Playwright criterion fits (like placeholder or role), use the internal string format or highly precise attribute selectors that seamlessly match a string field typing (e.g., "input[placeholder='Username']", "input[type='submit']", etc.).
+      4. STRICT ASSERTION PROTECTION SHIELD: You are completely FORBIDDEN from altering, correcting, or touching any assertion statements, business logic checks, or verification text expectations (such as .toHaveText(), .toContainText(), or expect values). Only heal the broken structural selector paths or property variable string definitions. Leave all assertion text expectations exactly as they are currently written!
       
       TASK:
       1. Analyze the ENTIRE target file text code layer simultaneously.
       2. Cross-reference EVERY element locator property string variable definition in this class against the HTML snapshot context provided in the system message.
-      3. Surgically overwrite ALL broken or drifted locator string values inside this file with their updated, compilation-safe parameters. Leave surrounding architecture, signatures, and constructor blocks completely untouched.
+      3. Surgically overwrite ONLY broken or drifted locator string values inside this file with their updated, compilation-safe parameters. Leave surrounding architecture, signatures, constructor blocks, and assertion text checks completely untouched.
       
       Return ONLY the complete, updated raw TypeScript code for this target file. Do not wrap code blocks within markdown container boxes.
     `;
@@ -312,7 +316,7 @@ async function executeHumanInTheLoopInterceptClaude(error: string, stack: string
 */
 
 
-    async onEnd(result: FullResult) {
+  async onEnd(result: FullResult) {
     const stateExists = fs.existsSync(stateTrackerFile);
     
     if (result.status === 'passed' && stateExists) {
@@ -325,57 +329,112 @@ async function executeHumanInTheLoopInterceptClaude(error: string, stack: string
         console.log('📦 Staging adjusted workspace text units...');
         execSync('git add .');
         
-        console.log('💾 Recording pristine commit logs onto ledger tracking index...');
-        execSync(`git commit -m "chore(agent-qe): autonomous repository alignment after successful self-healing verification"`);
+        const workspaceStatus = execSync('git status --porcelain').toString().trim();
+        if (workspaceStatus.length > 0) {
+          console.log('💾 Recording pristine commit logs onto ledger tracking index...');
+          execSync(`git commit -m "chore(agent-qe): autonomous repository alignment after successful self-healing verification"`);
+        } else {
+          console.log('✨ [AGENT GIT]: Working tree is clean. Skipping redundant commit allocation layer...');
+        }
         
         console.log(`📤 Executing upstream code transfer loop straight to remote origin branch: ${activeBranchName}...`);
         execSync(`git push origin ${activeBranchName} --force`);
 
+        // =======================================================================
+        // 🛠️ FAIL-SAFE REPOSITORY PATH SANITIZER (SURGICAL REPO PATH EXTRACTION)
+        // Splits the git remote URL safely to isolate only the target "owner/repo" path segment.
+        // =======================================================================
         const remoteUrl = execSync('git config --get remote.origin.url').toString().trim();
-        const cleanRepoPath = remoteUrl.replace(/.*github\.com[\/:]/, '').replace(/\.git\$/, '');
+        let cleanRepoPath = '';
         
+        const domainKeyword = 'github.com';
+        const keywordIndex = remoteUrl.indexOf(domainKeyword);
+        if (keywordIndex !== -1) {
+          let rawPathSegment = remoteUrl.substring(keywordIndex + domainKeyword.length);
+          if (rawPathSegment.startsWith('/') || rawPathSegment.startsWith(':')) {
+            rawPathSegment = rawPathSegment.substring(1);
+          }
+          cleanRepoPath = rawPathSegment.replace(/\.git$/, '').trim();
+        }
+
+
         const apiToken = process.env.GITHUB_TOKEN;
         
         if (!apiToken || apiToken === 'placeholder-token') {
           console.log('\n⚠️ [API ERROR]: GITHUB_TOKEN is missing inside your .env configuration file.');
           console.log(`🌐 [MANUAL FALLBACK]: Create your PR manually via this direct link:`);
-          console.log(`🔗 https://github.com{cleanRepoPath}/compare/main...${activeBranchName}?expand=1\n`);
+          console.log(`🔗 https://github.com/${cleanRepoPath}/compare/main...${activeBranchName}?expand=1\n`);
           fs.unlinkSync(stateTrackerFile);
           return;
         }
 
         console.log('🔥 [AGENT AUTOMATION]: Dispatching native asynchronous network frame to create GitHub Pull Request...');
         
-        // FIXED ENDPOINT URL ROUTE
-        const response = await fetch(`https://github.com{cleanRepoPath}/pulls`, {
+        const https = require('node:https');
+        
+        const postData = JSON.stringify({
+          title: `feat(agent-qe): auto-healed code components verification sweep (${activeBranchName})`,
+          body: 'This Pull Request was programmatically spawned and raised by the custom framework Agent QE Utility following a successful green execution state validation loop.',
+          head: `${cleanRepoPath.split('/')[0]}:${activeBranchName}`,
+          base: 'main'
+        });
+
+        // PRISTINE SPECIFICATION MATRIX: Communicates with absolute correct endpoint routing shapes
+        const options = {
+          hostname: 'api.github.com',
+          port: 443,
+          path: `/repos/${cleanRepoPath}/pulls`,
           method: 'POST',
           headers: {
             'Authorization': `token ${apiToken}`,
             'Accept': 'application/vnd.github.v3+json',
-            'Content-Type': 'application/json'
-          },
-          body: JSON.stringify({
-            title: `feat(agent-qe): auto-healed code components verification sweep (${activeBranchName})`,
-            body: 'This Pull Request was programmatically spawned and raised by the custom framework Agent QE Utility following a successful green execution state validation loop.',
-            head: activeBranchName,
-            base: 'main'
-          })
+            'Content-Type': 'application/json',
+            'User-Agent': 'Agent-QE-Utility-Framework'
+          }
+        };
+
+        const apiRequestPromise = new Promise<void>((resolve, reject) => {
+          const req = https.request(options, (res: any) => {
+            let body = '';
+            res.on('data', (chunk: any) => body += chunk);
+            res.on('end', () => {
+              try {
+                if (res.statusCode === 422) {
+                  console.log('\n======================================================================');
+                  console.log('🐙 INFO: A PULL REQUEST FOR THIS FEATURE BRANCH IS ALREADY ACTIVE ON GITHUB');
+                  console.log('======================================================================');
+                  console.log(`🔗 TRACKING LINK: https://github.com/${cleanRepoPath}/pulls`);
+                  console.log('======================================================================\n');
+                  resolve();
+                  return;
+                }
+
+                const prData = JSON.parse(body);
+                if ((res.statusCode === 200 || res.statusCode === 201) && prData.html_url) {
+                  console.log('\n======================================================================');
+                  console.log('🐙 SUCCESS: PULL REQUEST AUTOMATION COMPLETE (VIA NATIVE HTTPS CORE)');
+                  console.log('======================================================================');
+                  console.log(`👉 STATUS: Live PR raised autonomously by the framework backend!`);
+                  console.log(`🔗 PR ACCESS LINK: ${prData.html_url}`);
+                  console.log('======================================================================\n');
+                  resolve();
+                } else {
+                  console.log(`\n❌ [API ERROR]: GitHub rejected the PR payload. Code: ${res.statusCode}. Reason: ${prData.message || body}`);
+                  console.log(`🔗 [FALLBACK]: Try navigating to: https://github.com/${cleanRepoPath}/compare/main...${activeBranchName}?expand=1`);
+                  resolve();
+                }
+              } catch (e) {
+                reject(new Error(`Failed to parse API response stream: ${body}`));
+              }
+            });
+          });
+
+          req.on('error', (e: any) => reject(e));
+          req.write(postData);
+          req.end();
         });
 
-        const prData: any = await response.json();
-
-        if (response.ok && prData.html_url) {
-          console.log('\n======================================================================');
-          console.log('🐙 SUCCESS: PULL REQUEST AUTOMATION COMPLETE (VIA NATIVE WEB API)');
-          console.log('======================================================================');
-          console.log(`👉 STATUS: Live PR raised autonomously by the framework backend!`);
-          console.log(`🔗 PR ACCESS LINK: ${prData.html_url}`);
-          console.log('======================================================================\n');
-        } else {
-          console.log(`\n❌ [API ERROR]: GitHub rejected the PR payload. Reason: ${prData.message || JSON.stringify(prData)}`);
-          console.log(`🔗 [FALLBACK]: Try navigating to: https://github.com{cleanRepoPath}/compare/main...${activeBranchName}?expand=1`);
-        }
-
+        await apiRequestPromise;
         fs.unlinkSync(stateTrackerFile);
 
       } catch (gitExecutionError: any) {
@@ -387,7 +446,5 @@ async function executeHumanInTheLoopInterceptClaude(error: string, stack: string
       console.log('\n✨ [RUN COMPLETION]: Ordinary test sweep passed cleanly. No corrections were needed, skipping automated Git operations.');
     }
   }
-
-
 
 }
