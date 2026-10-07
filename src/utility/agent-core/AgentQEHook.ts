@@ -354,7 +354,7 @@ async function executeHumanInTheLoopInterceptClaude(error: string, stack: string
           if (rawPathSegment.startsWith('/') || rawPathSegment.startsWith(':')) {
             rawPathSegment = rawPathSegment.substring(1);
           }
-          cleanRepoPath = rawPathSegment.replace(/\.git\$/, '').trim();
+          cleanRepoPath = rawPathSegment.replace(/\.git$/, '').trim();
         }
 
 
@@ -363,7 +363,7 @@ async function executeHumanInTheLoopInterceptClaude(error: string, stack: string
         if (!apiToken || apiToken === 'placeholder-token') {
           console.log('\n⚠️ [API ERROR]: GITHUB_TOKEN is missing inside your .env configuration file.');
           console.log(`🌐 [MANUAL FALLBACK]: Create your PR manually via this direct link:`);
-          console.log(`🔗 https://github.com{cleanRepoPath}/compare/main...${activeBranchName}?expand=1\n`);
+          console.log(`🔗 https://github.com/${cleanRepoPath}/compare/main...${activeBranchName}?expand=1\n`);
           fs.unlinkSync(stateTrackerFile);
           return;
         }
@@ -375,13 +375,13 @@ async function executeHumanInTheLoopInterceptClaude(error: string, stack: string
         const postData = JSON.stringify({
           title: `feat(agent-qe): auto-healed code components verification sweep (${activeBranchName})`,
           body: 'This Pull Request was programmatically spawned and raised by the custom framework Agent QE Utility following a successful green execution state validation loop.',
-          head: activeBranchName,
+          head: `${cleanRepoPath.split('/')[0]}:${activeBranchName}`,
           base: 'main'
         });
 
         // PRISTINE SPECIFICATION MATRIX: Communicates with absolute correct endpoint routing shapes
         const options = {
-          hostname: '://github.com',
+          hostname: 'api.github.com',
           port: 443,
           path: `/repos/${cleanRepoPath}/pulls`,
           method: 'POST',
@@ -403,7 +403,7 @@ async function executeHumanInTheLoopInterceptClaude(error: string, stack: string
                   console.log('\n======================================================================');
                   console.log('🐙 INFO: A PULL REQUEST FOR THIS FEATURE BRANCH IS ALREADY ACTIVE ON GITHUB');
                   console.log('======================================================================');
-                  console.log(`🔗 TRACKING LINK: https://github.com{cleanRepoPath}/pulls`);
+                  console.log(`🔗 TRACKING LINK: https://github.com/${cleanRepoPath}/pulls`);
                   console.log('======================================================================\n');
                   resolve();
                   return;
@@ -420,7 +420,7 @@ async function executeHumanInTheLoopInterceptClaude(error: string, stack: string
                   resolve();
                 } else {
                   console.log(`\n❌ [API ERROR]: GitHub rejected the PR payload. Code: ${res.statusCode}. Reason: ${prData.message || body}`);
-                  console.log(`🔗 [FALLBACK]: Try navigating to: https://github.com{cleanRepoPath}/compare/main...${activeBranchName}?expand=1`);
+                  console.log(`🔗 [FALLBACK]: Try navigating to: https://github.com/${cleanRepoPath}/compare/main...${activeBranchName}?expand=1`);
                   resolve();
                 }
               } catch (e) {
