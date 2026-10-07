@@ -10,7 +10,7 @@ export class LoginPage extends BaseActions {
   public usernameField: string = "input[placeholder='Username']";
 
   // Corrected dynamic locator for password field
-  public passwordField: string = "input[placeholder='Password']";
+  public passwordField: string = "input[type='password']";
   public loginButton: string = "input[type='submit']";
 
   constructor(page: Page, context: BrowserContext) {
