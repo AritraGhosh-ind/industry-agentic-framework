@@ -147,7 +147,15 @@ repository's configured automation and all applicable gates below are met:
 - The run executed tests; it was not a list, dry run, or empty selection.
 - No pending business failure, unresolved locator, or stale choice remains.
 - Changes are limited to the verified repair files; unrelated user edits remain
-  untouched and unstaged.
+- For this repository's requested all-changes PR behavior, include every
+  non-ignored tracked modification and untracked project file present when the
+  PR is raised, in addition to paths recorded by the repair workflow. Do not
+  limit the PR to locator/business files listed in workflow state.
+- Because that policy includes the whole non-ignored working-tree change set,
+  inspect and report the exact file list before staging. Keep unrelated work out
+  of the working tree or ask the developer to confirm if unrelated edits are
+  present. Ignored local state, credentials, and generated artifacts remain
+  excluded.
 - The current branch is a suitable feature branch, not the protected base branch.
 - The remote, base branch, credentials, and repository permissions are
   confirmed. Never print, commit, or expose a credential.
@@ -206,6 +214,12 @@ directory names after inspecting the repository:
   `page.locator("...")` or `this.page.locator("...")` call, use the appropriate
   `getBy*` Locator method for ranks 1–7. For CSS/XPath strategies, use
   `locator(...)` with valid Playwright syntax.
+- A literal `page.getByText(...)`, `getByLabel(...)`, `getByPlaceholder(...)`,
+  `getByAltText(...)`, `getByTitle(...)`, or `getByTestId(...)` call outside
+  page objects is also eligible when the failure identifies the exact call.
+  Re-evaluate the intended element and apply the highest-priority unique
+  strategy; do not preserve a low-ranked `getBy*` method merely because it was
+  the original method.
 - Do not modify computed selectors, helper abstractions, chained locators, or
   non-literal locator expressions unless the exact source form is understood
   and safely supported.

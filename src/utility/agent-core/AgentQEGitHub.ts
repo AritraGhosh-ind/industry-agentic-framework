@@ -1,7 +1,8 @@
 import * as fs from 'node:fs';
+import * as path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import * as https from 'node:https';
-import { stateTrackerFile, type AgentState } from './agent-qe-shared';
+import { projectRoot, stateTrackerFile, type AgentState } from './agent-qe-shared';
 
 export class AgentQEGitHub {
   async raisePullRequest(state: AgentState): Promise<void> {
@@ -21,12 +22,13 @@ export class AgentQEGitHub {
       throw new Error('Pull request creation requires GITHUB_TOKEN with repository write permission.');
     }
 
-    const files = [...new Set(state.changedFiles)];
-    if (files.length === 0) throw new Error('No repaired files are recorded; refusing to create a PR.');
+    const files = this.collectChangedFiles(state);
+    if (files.length === 0) throw new Error('No changed files are available; refusing to create a PR.');
+    console.log(`[AGENT]: Including all non-ignored working-tree changes in the PR:\n${files.map((file) => `  - ${file}`).join('\n')}`);
     execFileSync('git', ['add', '--', ...files], { stdio: 'inherit' });
 
-    const stagedChanges = execFileSync('git', ['diff', '--cached', '--name-only', '--', ...files], { encoding: 'utf8' }).trim();
-    if (stagedChanges) {
+    const stagedChanges = this.gitPathList(['diff', '--cached', '--name-only', '-z', '--', ...files]);
+    if (stagedChanges.length > 0) {
       execFileSync('git', [
         'commit',
         '-m',
@@ -34,6 +36,8 @@ export class AgentQEGitHub {
         '--',
         ...files
       ], { stdio: 'inherit' });
+    } else {
+      throw new Error('No changes were staged for the PR; refusing to push an empty repair commit.');
     }
 
     execFileSync('git', ['push', 'origin', branch], { stdio: 'inherit' });
@@ -54,6 +58,29 @@ export class AgentQEGitHub {
     if (!pullRequest.html_url) throw new Error('GitHub accepted the request without returning a pull-request URL.');
     console.log(`[AGENT]: Pull request created: ${pullRequest.html_url}`);
     if (fs.existsSync(stateTrackerFile)) fs.unlinkSync(stateTrackerFile);
+  }
+
+  private collectChangedFiles(state: AgentState): string[] {
+    const changed = new Set([
+      ...state.changedFiles,
+      ...this.gitPathList(['diff', '--name-only', '-z', 'HEAD']),
+      ...this.gitPathList(['ls-files', '--others', '--exclude-standard', '-z'])
+    ]);
+
+    return [...changed].filter((file) => {
+      const absolutePath = path.resolve(projectRoot, file);
+      const relativePath = path.relative(projectRoot, absolutePath);
+      if (path.isAbsolute(relativePath) || relativePath === '..' ||
+          relativePath.startsWith(`..${path.sep}`)) {
+        throw new Error(`Refusing to include a changed path outside the project: ${file}`);
+      }
+      return relativePath !== '';
+    });
+  }
+
+  private gitPathList(args: string[]): string[] {
+    const output = execFileSync('git', args, { cwd: projectRoot });
+    return output.toString('utf8').split('\0').filter(Boolean);
   }
 
   private async findOpenPullRequest(repository: string, branch: string, token: string): Promise<string | undefined> {

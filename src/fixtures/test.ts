@@ -37,12 +37,13 @@ async function attachDomSnapshot(page: Page, testInfo: TestInfo): Promise<void> 
           ['button', 'submit', 'reset'].includes(element.type.toLowerCase())) {
         return element.value && element.value.length <= 100 ? element.value : undefined;
       }
-      const isNamedControl = ['button', 'a', 'label'].includes(tagName) ||
-        /^h[1-6]$/.test(tagName) ||
-        ['button', 'link', 'checkbox', 'radio', 'tab', 'menuitem'].includes(role || '');
-      if (!isNamedControl) return undefined;
+      if (['script', 'style', 'template', 'input', 'textarea', 'select'].includes(tagName)) return undefined;
 
-      const value = (element.getAttribute('aria-label') || element.innerText || '').trim().replace(/\s+/g, ' ');
+      const directText = Array.from(element.childNodes)
+        .filter((node) => node.nodeType === Node.TEXT_NODE)
+        .map((node) => node.textContent || '')
+        .join(' ');
+      const value = (element.getAttribute('aria-label') || directText || '').trim().replace(/\s+/g, ' ');
       return value && value.length <= 100 ? value : undefined;
     };
     const cssPathFor = (element: HTMLElement): string => {
