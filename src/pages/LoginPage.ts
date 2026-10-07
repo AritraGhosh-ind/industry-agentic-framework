@@ -9,6 +9,7 @@ export class LoginPage extends BaseActions {
   // Updated locator to ensure Autopilot Self-Healing!
   public usernameField: string = "input[placeholder='Username']";
 
+  // Corrected dynamic locator for password field
   public passwordField: string = "input[placeholder='Password']";
   public loginButton: string = "input[type='submit']";
 
