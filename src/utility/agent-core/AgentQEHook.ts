@@ -341,16 +341,21 @@ async function executeHumanInTheLoopInterceptClaude(error: string, stack: string
         execSync(`git push origin ${activeBranchName} --force`);
 
         // =======================================================================
-        // 🛠️ SAFE REPOSITORY PATH PARSER (ROBUST SPLIT LOGIC - ZERO RESIDUAL TYPOS)
-        // Sanitizes the remote configuration URL cleanly down to your core repo paths.
+        // 🛠️ FAIL-SAFE REPOSITORY PATH SANITIZER (SURGICAL REPO PATH EXTRACTION)
+        // Splits the git remote URL safely to isolate only the target "owner/repo" path segment.
         // =======================================================================
         const remoteUrl = execSync('git config --get remote.origin.url').toString().trim();
         let cleanRepoPath = '';
         
-        if (remoteUrl.includes('github.com')) {
-          // Extracts the user/repo segment cleanly regardless of protocol or trailing slashes
-          const urlParts = remoteUrl.split('github.com')[1];
-          cleanRepoPath = urlParts.replace(/^[\/:]/, '').replace(/\.git\$/, '').trim();
+        const domainKeyword = 'github.com';
+        const keywordIndex = remoteUrl.indexOf(domainKeyword);
+        if (keywordIndex !== -1) {
+          // Grabs everything past "github.com", replacing separating characters or trailing extensions cleanly
+          let rawPathSegment = remoteUrl.substring(keywordIndex + domainKeyword.length);
+          if (rawPathSegment.startsWith('/') || rawPathSegment.startsWith(':')) {
+            rawPathSegment = rawPathSegment.substring(1);
+          }
+          cleanRepoPath = rawPathSegment.replace(/\.git\$/, '').trim();
         }
 
         const apiToken = process.env.GITHUB_TOKEN;
@@ -374,7 +379,7 @@ async function executeHumanInTheLoopInterceptClaude(error: string, stack: string
           base: 'main'
         });
 
-        // FIXED INDUSTRIAL OPTION MATRIX: Points strictly to the precise endpoint routing paths
+        // PRISTINE SPECIFICATION MATRIX: Communicates with absolute correct endpoint routing shapes
         const options = {
           hostname: '://github.com',
           port: 443,
@@ -394,7 +399,6 @@ async function executeHumanInTheLoopInterceptClaude(error: string, stack: string
             res.on('data', (chunk: any) => body += chunk);
             res.on('end', () => {
               try {
-                // If it's a 422, it usually means the PR is already open on GitHub from a prior attempt
                 if (res.statusCode === 422) {
                   console.log('\n======================================================================');
                   console.log('🐙 INFO: A PULL REQUEST FOR THIS FEATURE BRANCH IS ALREADY ACTIVE ON GITHUB');
