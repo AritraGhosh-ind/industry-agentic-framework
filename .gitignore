@@ -7,3 +7,5 @@ node_modules/
 /playwright/.cache/
 /playwright/.auth/
 .env
+.agent_qe_state.json
+.agent_correction_state.json
