@@ -55,6 +55,7 @@ export interface LocatorTarget {
   filePath: string;
   sourceKind: 'page-property' | 'page-locator-call';
   currentSelector: string;
+  locatorMethod?: string;
   propertyName?: string;
   locatorReceiver?: string;
 }

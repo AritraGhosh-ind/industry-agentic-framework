@@ -5,7 +5,7 @@ import { execFileSync } from 'node:child_process';
 import { AgentQEGitHub } from './AgentQEGitHub';
 import { BusinessOptions } from './AgentQEBusinessOptions';
 import { LocatorRepair } from './AgentQELocatorRepair';
-import { addChangedFile, normalizePath, playwrightCli, readState, writeState } from './agent-qe-shared';
+import { addChangedFile, normalizePath, playwrightCli, readState, writeState, type AgentState } from './agent-qe-shared';
 
 export default class AgentQEHook implements Reporter {
   private pendingFailures: Array<{ test: TestCase; result: TestResult }> = [];
@@ -43,7 +43,7 @@ export default class AgentQEHook implements Reporter {
           addChangedFile(state, normalizePath(state.pendingBusiness.sourceFile));
           delete state.pendingBusiness;
           writeState(state);
-        } else {
+        } else if (this.isSamePendingBusinessFailure(state.pendingBusiness)) {
           const optionApplied = await this.businessOptions.offerBusinessOptions(state, state.pendingBusiness);
           if (!optionApplied) return { status: 'failed' };
           state = readState();
@@ -55,8 +55,14 @@ export default class AgentQEHook implements Reporter {
             await this.git.raisePullRequest(state);
           }
           return { status: 'passed' };
+        } else {
+          console.log('[AGENT]: The saved business failure is no longer the current failure; discarding its stale prompt.');
+          delete state.pendingBusiness;
+          writeState(state);
         }
-      } else if (result.status !== 'passed' && this.pendingFailures.length > 0) {
+      }
+
+      if (result.status !== 'passed' && this.pendingFailures.length > 0) {
         const { test, result: failedResult } = this.pendingFailures[0];
         const outcome = await this.locatorRepair.processFailure(test, failedResult, state);
         if (outcome === 'locator-repaired') {
@@ -82,6 +88,19 @@ export default class AgentQEHook implements Reporter {
       console.error('[AGENT ERROR]: Failure processing did not complete:', error);
       return { status: 'failed' };
     }
+  }
+
+  private isSamePendingBusinessFailure(pending: NonNullable<AgentState['pendingBusiness']>): boolean {
+    return this.pendingFailures.some(({ test, result }) => {
+      const error = result.errors[0]?.message || '';
+      if (this.locatorRepair.classifyFailure(error) !== 'business' || test.title !== pending.testTitle) {
+        return false;
+      }
+      const location = result.errors[0]?.location;
+      const sourceFile = normalizePath(location?.file || test.location.file);
+      return sourceFile === normalizePath(pending.sourceFile) &&
+        (location?.line || test.location.line) === pending.line;
+    });
   }
 
   private rerunPlaywright(): FullResult['status'] {
