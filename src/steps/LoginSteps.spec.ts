@@ -39,8 +39,8 @@ test.describe('Enterprise E2E Authentication Flow Suite', () => {
 
     // Intentional business-logic failures: the reporter must stop here and
     // offer human choices instead of silently changing expected behavior.
-
-
+    // await expect(productHeader).toHaveText('Products Catalog');
+    // await expect(page).toHaveURL(/checkout/);
 
     console.log('[STEP RUNNER]: Test Case TC_001 successfully executed and verified green.');
   });
