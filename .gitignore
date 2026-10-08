@@ -9,3 +9,4 @@ node_modules/
 .env
 .agent_qe_state.json
 .agent_correction_state.json
+.agent_qe_locator_comments.log

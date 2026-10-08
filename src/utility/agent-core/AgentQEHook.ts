@@ -65,7 +65,7 @@ export default class AgentQEHook implements Reporter {
       if (result.status !== 'passed' && this.pendingFailures.length > 0) {
         const { test, result: failedResult } = this.pendingFailures[0];
         const outcome = await this.locatorRepair.processFailure(test, failedResult, state);
-        if (outcome === 'locator-repaired') {
+        if (outcome === 'locator-repaired' || outcome === 'locator-commented') {
           const retryStatus = this.rerunPlaywright();
           if (retryStatus !== 'passed') return { status: 'failed' };
           state = readState();

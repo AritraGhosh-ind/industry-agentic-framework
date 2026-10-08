@@ -2,7 +2,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import * as https from 'node:https';
-import { projectRoot, stateTrackerFile, type AgentState } from './agent-qe-shared';
+import { buildAgentSystemPrompt, openaiClient, projectRoot, stateTrackerFile, type AgentState } from './agent-qe-shared';
 
 export class AgentQEGitHub {
   async raisePullRequest(state: AgentState): Promise<void> {
@@ -29,10 +29,11 @@ export class AgentQEGitHub {
 
     const stagedChanges = this.gitPathList(['diff', '--cached', '--name-only', '-z', '--', ...files]);
     if (stagedChanges.length > 0) {
+      const commitMessage = await this.createUserFacingCommitMessage(stagedChanges);
       execFileSync('git', [
         'commit',
-        '-m',
-        'chore(qe-agent): apply verified locator and business-logic repairs',
+        '-m', commitMessage.subject,
+        '-m', commitMessage.body,
         '--',
         ...files
       ], { stdio: 'inherit' });
@@ -81,6 +82,71 @@ export class AgentQEGitHub {
   private gitPathList(args: string[]): string[] {
     const output = execFileSync('git', args, { cwd: projectRoot });
     return output.toString('utf8').split('\0').filter(Boolean);
+  }
+
+  private async createUserFacingCommitMessage(files: string[]): Promise<{ subject: string; body: string }> {
+    const testTitles = files.flatMap((file) => {
+      if (!/\.(?:spec|test)\.[cm]?[jt]sx?$/.test(file)) return [];
+      const source = fs.readFileSync(path.resolve(projectRoot, file), 'utf8');
+      return [...source.matchAll(/\b(?:test|it)\s*\(\s*(['"`])([^'"`]{8,180})\1/g)]
+        .map((match) => match[2]);
+    }).slice(0, 20);
+
+    const response = await openaiClient.chat.completions.create({
+      model: 'gpt-4o',
+      temperature: 0,
+      response_format: { type: 'json_object' },
+      messages: [
+        {
+          role: 'system',
+          content: buildAgentSystemPrompt('Write a concise, human-readable Git commit message about the user-visible or business-level outcome of the staged changes. Do not mention implementation details, selectors, DOM tags, filenames, or low-level refactoring. Use only the supplied file paths and test titles; do not infer unsupported behavior. Return JSON with subject and body strings.')
+        },
+        {
+          role: 'user',
+          content: JSON.stringify({
+            task: 'Summarize the staged change scope without receiving or inspecting source diffs.',
+            changedFiles: files,
+            relatedTestTitles: testTitles,
+            constraints: {
+              subject: 'Imperative, maximum 72 characters, no prefix like feat: or chore:',
+              body: 'One or two plain-language sentences describing the outcome and verification scope. If the metadata is insufficient, state the change scope conservatively.'
+            },
+            output: { subject: 'string', body: 'string' }
+          })
+        }
+      ]
+    });
+
+    // Anthropic Claude API equivalent using anthropicClient from agent-qe-shared.ts:
+    // const claudeResponse = await anthropicClient.messages.create({
+    //   model: process.env.ANTHROPIC_MODEL || 'claude-sonnet-4-20250514',
+    //   max_tokens: 512,
+    //   system: 'Write a concise business-level commit message. Return JSON with subject and body.',
+    //   messages: [{
+    //     role: 'user',
+    //     content: JSON.stringify({ changedFiles: files, relatedTestTitles: testTitles })
+    //   }]
+    // });
+    // const claudeContent = claudeResponse.content.find((block) => block.type === 'text')?.text;
+    // const claudeMessage = claudeContent ? JSON.parse(claudeContent) : undefined;
+
+    const content = response.choices[0]?.message?.content;
+    if (!content) throw new Error('Commit-message generation returned an empty response; no commit was created.');
+    const parsed: unknown = JSON.parse(content);
+    if (typeof parsed !== 'object' || parsed === null ||
+        !('subject' in parsed) || typeof parsed.subject !== 'string' ||
+        !('body' in parsed) || typeof parsed.body !== 'string') {
+      throw new Error('Commit-message generation returned an invalid subject/body shape; no commit was created.');
+    }
+    const subject = parsed.subject.trim();
+    const body = parsed.body.trim();
+    const message = `${subject}\n${body}`;
+    if (!subject || subject.length > 72 || /[\r\n]/.test(subject) || !body ||
+        /\b(?:div|span|xpath|css selector|locator|selector|DOM node)\b|(?:src\/|\.tsx?\b|\.spec\b|\.md\b)/i.test(message)) {
+      throw new Error('Commit-message generation returned an invalid or overly technical message; no commit was created.');
+    }
+    console.log(`[AGENT]: Generated commit message: ${subject}`);
+    return { subject, body };
   }
 
   private async findOpenPullRequest(repository: string, branch: string, token: string): Promise<string | undefined> {

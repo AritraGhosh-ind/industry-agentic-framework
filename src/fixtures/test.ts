@@ -119,6 +119,14 @@ export const test = base.extend<AgentFixtures>({
   captureAgentDomSnapshot: [async ({ page }, use, testInfo) => {
     await use();
     if (testInfo.status === 'failed' || testInfo.status === 'timedOut') {
+      try {
+        await testInfo.attach('failure-screenshot.png', {
+          body: await page.screenshot({ fullPage: true }),
+          contentType: 'image/png'
+        });
+      } catch (error) {
+        console.error(`[AGENT FIXTURE]: Could not attach the failure screenshot for "${testInfo.title}":`, error);
+      }
       await attachDomSnapshot(page, testInfo);
     }
   }, { auto: true }]
