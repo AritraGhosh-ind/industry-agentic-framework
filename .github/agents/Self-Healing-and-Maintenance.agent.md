@@ -129,12 +129,12 @@ A failure is eligible for locator repair only when all are true:
   obsolete or unrelated to the current behavior, and the local locator
   declaration has the explicit `// @agent-qe-obsolete-locator` marker
   immediately above it, automatically comment out only that declaration and
-  directly associated assertion line(s), then rerun the test. The marker is
-  required human authorization, not proof by itself. Never infer irrelevance
-  solely because an expected element is absent from the DOM. If intent is
-  ambiguous, the marker is absent, evidence is incomplete, or the source is not
-  a uniquely identified local locator plus assertion, leave it unchanged and
-  fail.
+  directly associated assertion line(s), then skip that exact assertion in the
+  active test and continue without closing the browser. The marker is required
+  human authorization, not proof by itself. Never infer irrelevance solely
+  because an expected element is absent from the DOM. If intent is ambiguous,
+  the marker is absent, evidence is incomplete, or the source is not a uniquely
+  identified local locator plus assertion, leave it unchanged and fail.
 - Append an audit entry containing the test, source path, selector, reason, and
   exact commented lines to `.agent_qe_locator_comments.log`. This is a local,
   gitignored log and must not be committed or included in a PR.
@@ -169,15 +169,23 @@ unresolved business/test failure.
 
 1. Run the project's normal Playwright test command with the configured
    reporter and fixtures.
-2. If a safe locator failure occurs, repair only that locator, then start a
-   fresh test process using the same relevant test selection and configuration.
-3. Continue one repair at a time. A later locator failure can be repaired in a
-   subsequent fresh run; never assume a previous repair proves the entire suite.
+2. Handle eligible locator failures inside the active test while its browser
+   page remains open. Repair only the failed locator, retry the failed matcher
+   or action once with the repaired locator, then let the test continue at the
+   next statement. Do not close the browser or restart the test for locator
+   repairs. If the active test cannot safely heal and retry the operation,
+   preserve the original error and fail the test; do not fall back to a
+   post-test locator repair or whole-test restart.
+3. Continue one locator repair at a time. Do not retry the same failed operation
+   repeatedly; if its single retry fails, stop and report the remaining failure.
 4. If a business/test failure is encountered, save enough context to identify
    the test, file, line, failure, and current source state. Do not offer or apply
    a business change during this first encounter. Stop and preserve the failed
    result.
-5. If a run executes zero tests (for example, test discovery/list mode), do not
+5. Business/test failures are not locator-healed; after the test ends, they may
+   use the separate human-selected business-options workflow and a fresh test
+   run after a choice is applied.
+6. If a run executes zero tests (for example, test discovery/list mode), do not
    treat it as a pass, clear pending state, stage files, or perform GitHub
    operations.
 
@@ -186,9 +194,12 @@ unresolved business/test failure.
 1. On the next normal test execution, first verify that the saved failure still
    applies to the current source. If the code changed manually, run the tests
    normally and do not apply stale suggestions.
-2. Explain the failing behavior and show relevant source context. Distinguish
-   facts from assumptions; consult the specification or ask the user when the
-   intended behavior is not established.
+2. Before listing correction choices, show the exact failing assertion (when
+   available), the Playwright failure reason/message, and relevant source
+   context. The reason must be visible alongside the choices so a developer can
+   distinguish options by the failure they address. Distinguish facts from
+   assumptions; consult the specification or ask the user when the intended
+   behavior is not established.
 3. Present all useful, materially distinct options. Do not impose an arbitrary
    maximum; avoid duplicate or cosmetic variants.
 4. Always include an explicit **remove obsolete check/requirement** option in
@@ -202,8 +213,12 @@ unresolved business/test failure.
    edits from the current file; never apply either choice automatically.
 6. For each option, describe its behavioral consequence and the exact proposed
    source change. Do not present speculation as an authoritative requirement.
-7. Wait for the developer's explicit choice. Cancellation, an invalid choice, a
-   non-interactive session, or unavailable evidence means no business edit.
+7. Wait for the developer's explicit choice. In an interactive terminal, accept
+   a listed option ID or 0 to cancel. In a non-interactive terminal, accept the
+   explicitly supplied `AGENT_QE_OPTION` environment variable only when it is
+   0 or a listed option ID; consume it once and never carry it into a verification
+   rerun. Missing/invalid selection or unavailable evidence means no business
+   edit.
 8. Apply only the selected change. Confirm the target file and exact source
    range still match; if not, stop and regenerate choices from current evidence.
 
@@ -333,14 +348,37 @@ directory names after inspecting the repository:
 
 ## 6. DOM evidence and privacy
 
+- For every locator-healing decision, use all three evidence sources together:
+  semantic test/source context (including names, comments, and nearby
+  assertions), the current sanitized serialized page source, and the
+  structured current DOM snapshot. The runtime must attach the page source from
+  `page.content()` to the failing test and pass it to the locator-selection
+  model. Do not rely on only one source or let similarity alone determine the
+  target; reconcile evidence and stop as ambiguous if sources conflict or do
+  not prove a unique intended element.
+- Locator assertions in tests must use the `expect` exported by the shared
+  project fixture. Locator actions must run through the fixture's
+  `runWithLocatorHealing` helper, as the shared page-action helpers do. This is
+  the in-test recovery boundary; direct imports from `@playwright/test` or
+  unwrapped direct locator actions bypass live self-healing.
+- Keep the active page open while gathering evidence and requesting a locator
+  repair. Retry the failed assertion/action at most once in that same page and
+  continue the test only if the retry succeeds. Extend the test timeout while
+  the model-assisted repair is in progress. Do not restart the test after a
+  locator repair; if healing cannot be completed safely, preserve the original
+  failure and do not perform a post-test locator-repair fallback.
 - Capture only the metadata required to identify a locator: role, accessible
   name, text where relevant, test ID, label, placeholder, alt/title, stable
   attributes, visibility, and selector paths.
-- Never capture or send passwords, input values, authentication tokens,
-  cookies, personal data, or unrelated page content.
-- Bound the snapshot size and mark truncation explicitly.
-- Attach the snapshot to the failing test result or use another reliable,
-  test-scoped mechanism. Do not use a stale global page snapshot as evidence.
+- Remove scripts, styles, form values, and recognizable email/phone values
+  before attaching or sending serialized page source. Do not capture or send
+  passwords, authentication tokens, cookies, or unrelated page content.
+- Bound both the structured snapshot and serialized page source, and mark
+  truncation explicitly. A truncated source is supplementary evidence only;
+  never use it alone to establish uniqueness.
+- Attach both the structured snapshot and sanitized page source to the failing
+  test result or use another reliable, test-scoped mechanism. Do not use stale
+  global evidence.
 - If evidence is absent or invalid, fail safely rather than fabricate a target.
 - Every executed test must retain a trace, video, and screenshot in its test
   result/report. Configure the runner to record these for passing and failing

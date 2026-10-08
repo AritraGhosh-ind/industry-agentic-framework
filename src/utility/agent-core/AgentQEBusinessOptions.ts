@@ -14,6 +14,17 @@ export class BusinessOptions {
       .map((line, index) => `${start + index + 1}: ${line}`)
       .join('\n');
 
+    console.log(`\nBUSINESS-LOGIC FAILURE: ${failure.testTitle}`);
+    console.log(`File: ${failure.sourceFile}:${failure.line}`);
+    const failingAssertion = lines[failure.line - 1]?.trim();
+    if (failingAssertion) console.log(`Failing assertion: ${failingAssertion}`);
+    console.log('Failure reason:');
+    const failureReason = failure.error.trim();
+    console.log(failureReason
+      ? failureReason.split(/\r?\n/).map((line) => `  ${line}`).join('\n')
+      : '  Playwright did not provide an error message.');
+    console.log('Generating correction options from the current assertion and source...');
+
     const response = await openaiClient.chat.completions.create({
       model: 'gpt-4o',
       temperature: 0.2,
@@ -137,8 +148,7 @@ export class BusinessOptions {
       }
     }
 
-    console.log(`\nBUSINESS-LOGIC FAILURE: ${failure.testTitle}`);
-    console.log(`File: ${failure.sourceFile}:${failure.line}`);
+    console.log('\nAvailable correction options:');
     options.forEach((option) => {
       const label = option.kind === 'remove-obsolete'
         ? '[Remove obsolete check] '
@@ -193,8 +203,24 @@ export class BusinessOptions {
   }
 
   private async readOptionSelection(options: BusinessOption[]): Promise<number | undefined> {
+    const configuredSelection = process.env.AGENT_QE_OPTION;
+    if (configuredSelection !== undefined) {
+      delete process.env.AGENT_QE_OPTION;
+      const selection = Number(configuredSelection.trim());
+      const validIds = new Set(options.map((option) => option.id));
+      if (!Number.isInteger(selection) || (selection !== 0 && !validIds.has(selection))) {
+        throw new Error(`AGENT_QE_OPTION must be 0 or one of the displayed option IDs (${[...validIds].join(', ')}).`);
+      }
+      if (selection === 0) {
+        console.log('[AGENT]: Option 0 selected; leaving the business failure pending.');
+        return undefined;
+      }
+      console.log(`[AGENT]: Applying explicitly selected option ${selection} from AGENT_QE_OPTION.`);
+      return selection;
+    }
+
     if (!process.stdin.isTTY || !process.stdout.isTTY) {
-      throw new Error('Business-logic options require an interactive terminal. The failure remains pending.');
+      throw new Error(`Business options were displayed but no interactive terminal is available. Set AGENT_QE_OPTION to 0 or one of the displayed option IDs, then rerun. The failure remains pending.`);
     }
     const validIds = new Set(options.map((option) => option.id));
     const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
