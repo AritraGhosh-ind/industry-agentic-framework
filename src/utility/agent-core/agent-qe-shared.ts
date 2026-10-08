@@ -61,6 +61,11 @@ export interface DomSnapshot {
   truncated: boolean;
 }
 
+export interface PageSource {
+  html: string;
+  truncated: boolean;
+}
+
 export interface PendingBusinessFailure {
   testTitle: string;
   sourceFile: string;
@@ -90,6 +95,7 @@ export interface LocatorTarget {
 export interface LocatorCandidate {
   nodeId: number;
   rank: number;
+  selector: string;
   replacement: string;
   description: string;
 }
@@ -179,6 +185,17 @@ export function normalizePath(filePath: string): string {
   return path.resolve(projectRoot, filePath);
 }
 
+export function lineForSourceFile(stack: string, sourceFile: string): number | undefined {
+  const expectedPath = normalizePath(sourceFile).toLowerCase();
+  for (const stackLine of stack.split(/\r?\n/)) {
+    const match = stackLine.match(/(?:\(|at\s+)(.+):(\d+):\d+\)?\s*$/);
+    if (match && normalizePath(match[1]).toLowerCase() === expectedPath) {
+      return Number(match[2]);
+    }
+  }
+  return undefined;
+}
+
 export function isWithinSourceRoot(filePath: string): boolean {
   const relative = path.relative(sourceRoot, filePath);
   return relative !== '..' && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative);
@@ -234,6 +251,26 @@ export function parseDomSnapshot(result: TestResult): DomSnapshot | undefined {
   return nodes.length > 0 ? { nodes, truncated: true } : undefined;
 }
 
+export function parsePageSource(result: TestResult): PageSource | undefined {
+  const attachment = result.attachments.find((item) => item.name === 'agent-page-source.json');
+  if (!attachment) return undefined;
+
+  const contents = attachment.body
+    ? attachment.body.toString('utf8')
+    : attachment.path
+      ? fs.readFileSync(attachment.path, 'utf8')
+      : undefined;
+  if (!contents) throw new Error('The attached page source did not contain readable data.');
+  const parsed: unknown = JSON.parse(contents);
+  if (typeof parsed !== 'object' || parsed === null ||
+      !('html' in parsed) || typeof parsed.html !== 'string' ||
+      !('truncated' in parsed) || typeof parsed.truncated !== 'boolean') {
+    throw new Error('The attached page source has an invalid shape.');
+  }
+  if (!parsed.html) throw new Error('The attached page source is empty.');
+  return parsed as PageSource;
+}
+
 export function accessibleName(node: DomNode): string | undefined {
   return node.name || node.label || node.text;
 }
@@ -275,7 +312,7 @@ export function candidatesForSnapshot(snapshot: DomSnapshot, target: LocatorTarg
         default: replacement = `${receiver}.locator(${value})`;
       }
     }
-    raw.push({ nodeId: node.id, rank, replacement, description });
+    raw.push({ nodeId: node.id, rank, selector, replacement, description });
   };
 
   for (const node of snapshot.nodes) {

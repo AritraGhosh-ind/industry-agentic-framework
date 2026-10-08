@@ -10,7 +10,7 @@ export class LoginPage extends BaseActions {
   public usernameField: string = "role=textbox[name=\"Username\"]";
 
   // Corrected dynamic locator for password field
-  public passwordField: string = "input[type='password']";
+  public passwordField: string = "[placeholder=\"Password\"]";
   public loginButton: string = 'role=button[name="Login"]';
 
   constructor(page: Page, context: BrowserContext) {

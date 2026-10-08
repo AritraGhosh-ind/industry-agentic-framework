@@ -1,11 +1,12 @@
 /// <reference types="node" />
 import type { Reporter, TestCase, TestResult, FullResult } from '@playwright/test/reporter';
 import * as fs from 'node:fs';
+import * as path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { AgentQEGitHub } from './AgentQEGitHub';
 import { BusinessOptions } from './AgentQEBusinessOptions';
 import { LocatorRepair } from './AgentQELocatorRepair';
-import { addChangedFile, normalizePath, playwrightCli, readState, writeState, type AgentState } from './agent-qe-shared';
+import { addChangedFile, lineForSourceFile, normalizePath, playwrightCli, readState, writeState, type AgentState } from './agent-qe-shared';
 
 export default class AgentQEHook implements Reporter {
   private pendingFailures: Array<{ test: TestCase; result: TestResult }> = [];
@@ -38,6 +39,11 @@ export default class AgentQEHook implements Reporter {
 
       let state = readState();
       if (state.pendingBusiness && this.hadPendingBusinessAtStart) {
+        const currentPendingFailure = this.findPendingBusinessFailure(state.pendingBusiness);
+        if (currentPendingFailure) {
+          state.pendingBusiness = currentPendingFailure;
+          writeState(state);
+        }
         if (result.status === 'passed') {
           console.log('[AGENT]: The pending business-logic change was corrected manually; continuing with the passing run.');
           addChangedFile(state, normalizePath(state.pendingBusiness.sourceFile));
@@ -64,17 +70,12 @@ export default class AgentQEHook implements Reporter {
 
       if (result.status !== 'passed' && this.pendingFailures.length > 0) {
         const { test, result: failedResult } = this.pendingFailures[0];
-        const outcome = await this.locatorRepair.processFailure(test, failedResult, state);
-        if (outcome === 'locator-repaired' || outcome === 'locator-commented') {
-          const retryStatus = this.rerunPlaywright();
-          if (retryStatus !== 'passed') return { status: 'failed' };
-          state = readState();
-          if (state.pendingBusiness) return { status: 'failed' };
-          if (process.env.AGENT_QE_INTERNAL_RETRY !== '1' && state.correctionsMade) {
-            await this.git.raisePullRequest(state);
-          }
-          return { status: 'passed' };
+        const error = failedResult.errors[0]?.message || '';
+        if (this.locatorRepair.classifyFailure(error) === 'locator') {
+          console.error('[AGENT]: Locator failures must be healed inside the active test. No post-test browser restart will be attempted.');
+          return { status: 'failed' };
         }
+        await this.locatorRepair.processFailure(test, failedResult, state);
         return { status: 'failed' };
       }
 
@@ -91,16 +92,38 @@ export default class AgentQEHook implements Reporter {
   }
 
   private isSamePendingBusinessFailure(pending: NonNullable<AgentState['pendingBusiness']>): boolean {
-    return this.pendingFailures.some(({ test, result }) => {
+    return this.findPendingBusinessFailure(pending) !== undefined;
+  }
+
+  private findPendingBusinessFailure(
+    pending: NonNullable<AgentState['pendingBusiness']>
+  ): NonNullable<AgentState['pendingBusiness']> | undefined {
+    for (const { test, result } of this.pendingFailures) {
       const error = result.errors[0]?.message || '';
       if (this.locatorRepair.classifyFailure(error) !== 'business' || test.title !== pending.testTitle) {
-        return false;
+        continue;
       }
-      const location = result.errors[0]?.location;
-      const sourceFile = normalizePath(location?.file || test.location.file);
-      return sourceFile === normalizePath(pending.sourceFile) &&
-        (location?.line || test.location.line) === pending.line;
-    });
+      const sourceFile = normalizePath(test.location.file);
+      const stack = result.errors[0]?.stack || '';
+      const line = lineForSourceFile(stack, sourceFile) ??
+        (result.errors[0]?.location?.file &&
+        normalizePath(result.errors[0].location.file) === sourceFile
+          ? result.errors[0].location.line
+          : test.location.line);
+      const priorStackLine = lineForSourceFile(pending.stack, sourceFile);
+      const sameStoredFailure =
+        (sourceFile === normalizePath(pending.sourceFile) && line === pending.line) ||
+        (priorStackLine !== undefined && priorStackLine === line);
+      if (!sameStoredFailure) continue;
+      return {
+        ...pending,
+        sourceFile: path.relative(process.cwd(), sourceFile).split(path.sep).join('/'),
+        line,
+        error,
+        stack
+      };
+    }
+    return undefined;
   }
 
   private rerunPlaywright(): FullResult['status'] {
@@ -112,7 +135,7 @@ export default class AgentQEHook implements Reporter {
       if (testArgs[index] === '--reporter') testArgs.splice(index, 2);
       else if (testArgs[index].startsWith('--reporter=')) testArgs.splice(index, 1);
     }
-    console.log('\n[AGENT]: Re-running Playwright to continue from the repaired failure...');
+    console.log('\n[AGENT]: Re-running Playwright from the beginning to verify the selected business-logic change...');
     try {
       execFileSync(process.execPath, [playwrightCli, 'test', ...testArgs], {
         stdio: 'inherit',

@@ -1,4 +1,5 @@
-import { Page, BrowserContext, expect } from '@playwright/test';
+import type { Page, BrowserContext } from '@playwright/test';
+import { expect, resolveHealedLocator, runWithLocatorHealing } from '../fixtures/test';
 
 /**
  * Enterprise Core Base Actions Wrapper Class
@@ -26,9 +27,12 @@ export class BaseActions {
    */
   public async typeInto(selector: string, text: string): Promise<void> {
     console.log(`[BASE ACTION]: Typing text values into target selector element: ${selector}`);
-    const locator = this.page.locator(selector);
-    await expect(locator).toBeVisible({ timeout: 10000 });
-    await locator.fill(text);
+    const originalLocator = this.page.locator(selector);
+    await expect(originalLocator).toBeVisible({ timeout: 10000 });
+    await runWithLocatorHealing(
+      resolveHealedLocator(originalLocator),
+      (locator) => locator.fill(text)
+    );
   }
 
   /**
@@ -36,9 +40,12 @@ export class BaseActions {
    */
   public async clickOn(selector: string): Promise<void> {
     console.log(`[BASE ACTION]: Executing active click action on element selector: ${selector}`);
-    const locator = this.page.locator(selector);
-    await expect(locator).toBeVisible({ timeout: 10000 });
-    await locator.click();
+    const originalLocator = this.page.locator(selector);
+    await expect(originalLocator).toBeVisible({ timeout: 10000 });
+    await runWithLocatorHealing(
+      resolveHealedLocator(originalLocator),
+      (locator) => locator.click()
+    );
   }
 
   /**

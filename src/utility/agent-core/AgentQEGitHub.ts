@@ -25,7 +25,17 @@ export class AgentQEGitHub {
     const files = this.collectChangedFiles(state);
     if (files.length === 0) throw new Error('No changed files are available; refusing to create a PR.');
     console.log(`[AGENT]: Including all non-ignored working-tree changes in the PR:\n${files.map((file) => `  - ${file}`).join('\n')}`);
-    execFileSync('git', ['add', '--', ...files], { stdio: 'inherit' });
+    const existingFiles = files.filter((file) => fs.existsSync(path.resolve(projectRoot, file)));
+    const missingFiles = files.filter((file) => !fs.existsSync(path.resolve(projectRoot, file)));
+    if (existingFiles.length > 0) {
+      execFileSync('git', ['add', '-A', '--', ...existingFiles], { stdio: 'inherit' });
+    }
+    if (missingFiles.length > 0) {
+      const indexedMissingFiles = this.gitPathList(['ls-files', '--cached', '-z', '--', ...missingFiles]);
+      if (indexedMissingFiles.length > 0) {
+        execFileSync('git', ['add', '-u', '--', ...indexedMissingFiles], { stdio: 'inherit' });
+      }
+    }
 
     const stagedChanges = this.gitPathList(['diff', '--cached', '--name-only', '-z', '--', ...files]);
     if (stagedChanges.length > 0) {
@@ -99,7 +109,7 @@ export class AgentQEGitHub {
       messages: [
         {
           role: 'system',
-          content: buildAgentSystemPrompt('Write a concise, human-readable Git commit message about the user-visible or business-level outcome of the staged changes. Do not mention implementation details, selectors, DOM tags, filenames, or low-level refactoring. Use only the supplied file paths and test titles; do not infer unsupported behavior. Return JSON with subject and body strings.')
+          content: buildAgentSystemPrompt('Write a concise, human-readable Git commit message about the user-visible or business-level outcome of the staged changes. Do not mention implementation details, selectors, DOM tags, filenames, or low-level refactoring. The subject and body must not contain any of these terms or file references: div, span, xpath, css selector, locator, selector, DOM node, src/, .tsx, .ts, .spec, .md. Use only the supplied file paths and test titles; do not infer unsupported behavior. Return JSON with subject and body strings.')
         },
         {
           role: 'user',
@@ -109,7 +119,8 @@ export class AgentQEGitHub {
             relatedTestTitles: testTitles,
             constraints: {
               subject: 'Imperative, maximum 72 characters, no prefix like feat: or chore:',
-              body: 'One or two plain-language sentences describing the outcome and verification scope. If the metadata is insufficient, state the change scope conservatively.'
+              body: 'One or two plain-language sentences describing the outcome and verification scope. If the metadata is insufficient, state the change scope conservatively.',
+              prohibitedTerms: ['div', 'span', 'xpath', 'css selector', 'locator', 'selector', 'DOM node', 'src/', '.tsx', '.ts', '.spec', '.md']
             },
             output: { subject: 'string', body: 'string' }
           })
@@ -141,9 +152,17 @@ export class AgentQEGitHub {
     const subject = parsed.subject.trim();
     const body = parsed.body.trim();
     const message = `${subject}\n${body}`;
-    if (!subject || subject.length > 72 || /[\r\n]/.test(subject) || !body ||
-        /\b(?:div|span|xpath|css selector|locator|selector|DOM node)\b|(?:src\/|\.tsx?\b|\.spec\b|\.md\b)/i.test(message)) {
-      throw new Error('Commit-message generation returned an invalid or overly technical message; no commit was created.');
+    const validationErrors = [
+      !subject ? 'subject is empty' : '',
+      subject.length > 72 ? 'subject exceeds 72 characters' : '',
+      /[\r\n]/.test(subject) ? 'subject contains a line break' : '',
+      !body ? 'body is empty' : '',
+      /\b(?:div|span|xpath|css selector|locator|selector|DOM node)\b|(?:src\/|\.tsx?\b|\.spec\b|\.md\b)/i.test(message)
+        ? 'message contains implementation-specific terminology or a source-file reference'
+        : ''
+    ].filter(Boolean);
+    if (validationErrors.length > 0) {
+      throw new Error(`Commit-message generation failed validation (${validationErrors.join('; ')}); no commit was created.`);
     }
     console.log(`[AGENT]: Generated commit message: ${subject}`);
     return { subject, body };
