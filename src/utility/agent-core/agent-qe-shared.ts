@@ -6,11 +6,36 @@ import { OpenAI } from 'openai';
 import * as dotenv from 'dotenv';
 dotenv.config();
 
+// Claude API alternative (after installing @anthropic-ai/sdk):
+// import Anthropic from '@anthropic-ai/sdk';
+// export const anthropicClient = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 export const openaiClient = new OpenAI({ apiKey: process.env.OPENAI_API_KEY || 'placeholder-gate-key' });
 export const projectRoot = process.cwd();
 export const sourceRoot = path.join(projectRoot, 'src');
 export const stateTrackerFile = path.join(projectRoot, '.agent_qe_state.json');
 export const playwrightCli = path.join(projectRoot, 'node_modules', '@playwright', 'test', 'cli.js');
+export const orchestratorInstructionsFile = path.join(
+  projectRoot,
+  '.github',
+  'agents',
+  'Self-Healing-and-Maintenance.agent.md'
+);
+
+function loadOrchestratorInstructions(): string {
+  if (!fs.existsSync(orchestratorInstructionsFile)) {
+    throw new Error(`Required self-healing agent instructions were not found: ${orchestratorInstructionsFile}`);
+  }
+  const document = fs.readFileSync(orchestratorInstructionsFile, 'utf8');
+  const instructions = document.replace(/^---\r?\n[\s\S]*?\r?\n---\r?\n/, '').trim();
+  if (!instructions) throw new Error(`Self-healing agent instructions are empty: ${orchestratorInstructionsFile}`);
+  return instructions;
+}
+
+export const orchestratorInstructions = loadOrchestratorInstructions();
+
+export function buildAgentSystemPrompt(taskInstructions: string): string {
+  return `${orchestratorInstructions}\n\n## Current operation\n${taskInstructions}`;
+}
 
 export interface DomNode {
   id: number;
@@ -56,6 +81,8 @@ export interface LocatorTarget {
   sourceKind: 'page-property' | 'page-locator-call';
   currentSelector: string;
   locatorMethod?: string;
+  intentName?: string;
+  intentText?: string;
   propertyName?: string;
   locatorReceiver?: string;
 }
@@ -69,6 +96,7 @@ export interface LocatorCandidate {
 
 export interface BusinessOption {
   id: number;
+  kind: 'change' | 'remove-obsolete' | 'delete-code' | 'comment-out-code';
   description: string;
   textToReplace: string;
   replacementText: string;
