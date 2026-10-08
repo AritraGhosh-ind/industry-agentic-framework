@@ -48,7 +48,27 @@ export class AgentQEGitHub {
         ...files
       ], { stdio: 'inherit' });
     } else {
-      throw new Error('No changes were staged for the PR; refusing to push an empty repair commit.');
+      const existingPullRequest = await this.findOpenPullRequest(repository, branch, apiToken);
+      if (existingPullRequest) {
+        console.log(`[AGENT]: No new changes to commit; an open pull request already covers this branch: ${existingPullRequest}`);
+        if (fs.existsSync(stateTrackerFile)) fs.unlinkSync(stateTrackerFile);
+        return;
+      }
+
+      const commitsAheadOfBase = Number(execFileSync(
+        'git',
+        ['rev-list', '--count', 'origin/main..HEAD'],
+        { cwd: projectRoot, encoding: 'utf8' }
+      ).trim());
+      if (!Number.isInteger(commitsAheadOfBase) || commitsAheadOfBase < 0) {
+        throw new Error(`Could not determine whether branch "${branch}" contains commits ahead of origin/main.`);
+      }
+      if (commitsAheadOfBase === 0) {
+        console.log('[AGENT]: No new changes to commit and no branch commits ahead of origin/main; no PR is needed.');
+        if (fs.existsSync(stateTrackerFile)) fs.unlinkSync(stateTrackerFile);
+        return;
+      }
+      console.log(`[AGENT]: No new working-tree changes; preparing a PR from ${commitsAheadOfBase} existing branch commit(s).`);
     }
 
     execFileSync('git', ['push', 'origin', branch], { stdio: 'inherit' });
