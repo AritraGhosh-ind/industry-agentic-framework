@@ -192,7 +192,7 @@ async function attachDomSnapshot(page: Page, testInfo: TestInfo): Promise<void> 
   });
 }
 
-async function healFailedLocator(locator: Locator, failure: unknown): Promise<Locator | undefined> {
+async function healFailedLocator(locator: Locator, failure: unknown): Promise<Locator | 'skip' | undefined> {
   if (!activeTest) return undefined;
   const error = failure instanceof Error ? failure.message : String(failure);
   const stack = failure instanceof Error ? failure.stack || '' : '';
@@ -213,6 +213,7 @@ async function healFailedLocator(locator: Locator, failure: unknown): Promise<Lo
       snapshot,
       pageSource
     );
+    if (selected === 'obsolete') return 'skip';
     return selected ? activeTest.page.locator(selected.selector) : undefined;
   } catch (error) {
     console.error('[AGENT]: In-test locator repair failed; preserving the original browser session and test failure:', error);
@@ -235,6 +236,7 @@ export async function runWithLocatorHealing<T>(
     }
 
     const repaired = await healFailedLocator(initialLocator, failure);
+    if (repaired === 'skip') return undefined;
     if (!repaired) throw removeFixtureFrames(failure);
     healedLocators.set(locator, repaired);
     return operation(repaired);
@@ -261,6 +263,7 @@ function wrapAssertion(assertion: object, locator: Locator | undefined, modifier
           }
 
           const repaired = await healFailedLocator(locator, failure);
+          if (repaired === 'skip') return;
           if (!repaired) throw removeFixtureFrames(failure);
           healedLocators.set(locator, repaired);
 
