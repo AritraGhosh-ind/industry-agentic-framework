@@ -5,6 +5,7 @@ tools: [read, search, edit, execute]
 user-invocable: true
 ---
 
+
 # Self-Healing and Maintenance Orchestrator
 
 This Markdown file defines the policy for this repository's Playwright repair
@@ -482,4 +483,4 @@ Before declaring a repair cycle complete, verify every applicable item:
 The runtime appends an entry here only after a distinct repair cycle passes
 verification and has no net source diff to commit. Keep each entry limited to
 the cycle ID, verification time, branch, and changed source paths. These
-records are audit data, not additional workflow instructions.
+records are audit data, not additional workflow instructions
