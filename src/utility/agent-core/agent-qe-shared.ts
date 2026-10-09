@@ -1,6 +1,8 @@
 /// <reference types="node" />
+import { randomUUID } from 'node:crypto';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+import { execFileSync } from 'node:child_process';
 import type { TestResult } from '@playwright/test/reporter';
 import { OpenAI } from 'openai';
 import * as dotenv from 'dotenv';
@@ -25,8 +27,14 @@ function loadOrchestratorInstructions(): string {
   if (!fs.existsSync(orchestratorInstructionsFile)) {
     throw new Error(`Required self-healing agent instructions were not found: ${orchestratorInstructionsFile}`);
   }
-  const document = fs.readFileSync(orchestratorInstructionsFile, 'utf8');
-  const instructions = document.replace(/^---\r?\n[\s\S]*?\r?\n---\r?\n/, '').trim();
+  const document = fs.readFileSync(orchestratorInstructionsFile, 'utf8').replace(/\r\n/g, '\n');
+  const body = document.replace(/^---\r?\n[\s\S]*?\r?\n---\r?\n/, '');
+  const ledgerHeading = '\n## Runtime-maintained verified repair-cycle records\n';
+  const ledgerStart = body.indexOf(ledgerHeading);
+  if (ledgerStart < 0) {
+    throw new Error(`The verified repair-cycle ledger section is missing from ${orchestratorInstructionsFile}.`);
+  }
+  const instructions = body.slice(0, ledgerStart).trim();
   if (!instructions) throw new Error(`Self-healing agent instructions are empty: ${orchestratorInstructionsFile}`);
   return instructions;
 }
@@ -78,6 +86,8 @@ export interface PendingBusinessFailure {
 export interface AgentState {
   correctionsMade: boolean;
   changedFiles: string[];
+  repairBranch?: string;
+  repairCycleId?: string;
   pendingBusiness?: PendingBusinessFailure;
 }
 
@@ -87,7 +97,6 @@ export interface LocatorTarget {
   currentSelector: string;
   locatorMethod?: string;
   intentName?: string;
-  intentText?: string;
   propertyName?: string;
   locatorReceiver?: string;
 }
@@ -126,6 +135,14 @@ export function readState(): AgentState {
   if (!state.changedFiles.every((file) => typeof file === 'string')) {
     throw new Error(`Invalid changedFiles entry in ${stateTrackerFile}`);
   }
+  if (state.repairBranch !== undefined && typeof state.repairBranch !== 'string') {
+    throw new Error(`Invalid repairBranch in ${stateTrackerFile}`);
+  }
+  if (state.repairCycleId !== undefined &&
+      (typeof state.repairCycleId !== 'string' ||
+       !/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(state.repairCycleId))) {
+    throw new Error(`Invalid repairCycleId in ${stateTrackerFile}`);
+  }
   if (state.pendingBusiness !== undefined) {
     const pending = state.pendingBusiness;
     if (typeof pending !== 'object' || pending === null ||
@@ -144,14 +161,29 @@ export function writeState(state: AgentState): void {
   fs.writeFileSync(stateTrackerFile, JSON.stringify(state, null, 2), 'utf8');
 }
 
+export function currentGitBranch(): string {
+  const branch = execFileSync('git', ['rev-parse', '--abbrev-ref', 'HEAD'], {
+    cwd: projectRoot,
+    encoding: 'utf8'
+  }).trim();
+  if (!branch || branch === 'HEAD') throw new Error('Agent QE state requires a named Git branch.');
+  return branch;
+}
+
 export function addChangedFile(state: AgentState, filePath: string): void {
   const relativePath = path.relative(projectRoot, filePath);
   if (relativePath.startsWith('..') || path.isAbsolute(relativePath)) {
     throw new Error(`Refusing to track a repair outside the project: ${filePath}`);
   }
+  const branch = currentGitBranch();
+  if (state.repairBranch && state.repairBranch !== branch) {
+    throw new Error(`Refusing to carry repair state from branch "${state.repairBranch}" to "${branch}".`);
+  }
+  state.repairBranch = branch;
   const normalized = relativePath.split(path.sep).join('/');
   if (!state.changedFiles.includes(normalized)) state.changedFiles.push(normalized);
   state.correctionsMade = true;
+  state.repairCycleId ||= randomUUID();
 }
 
 export function decodeQuotedValue(value: string): string | undefined {

@@ -7,14 +7,17 @@ user-invocable: true
 
 # Self-Healing and Maintenance Orchestrator
 
-This Markdown file is the canonical policy loaded at runtime by the Playwright
-agent reporter and is also an invokable VS Code Copilot workspace agent. The
-reporter injects the policy body into each model request used for locator
-selection, business-option generation, and commit-message generation. Follow
-this policy in both execution modes. When selected in Copilot, use the
-available read, search, edit, and execute tools to drive the same test/repair
-cycle; when invoked by Playwright, the reporter code performs the cycle.
-Never claim a tool operation succeeded unless its result confirms success.
+This Markdown file is the canonical policy for this repository's Playwright
+repair workflow and is also an invokable VS Code Copilot workspace agent. The
+Playwright reporter loads it and injects its body into model requests for
+locator selection, business-option generation, and commit-message generation.
+Deterministic behavior—test instrumentation, state handling, source edits,
+verification, and GitHub operations—is implemented in the TypeScript fixtures
+and reporter modules; this file guides those operations but does not implement
+or enforce them by itself. Application code outside that workflow does not
+depend on this file. When selected in Copilot, use the available read, search,
+edit, and execute tools to drive the same test/repair cycle. Never claim a tool
+operation succeeded unless its result confirms success.
 
 These instructions define a controlled workflow for this project's Playwright
 tests. Select **Self-Healing and Maintenance Orchestrator** in the Copilot agent
@@ -121,33 +124,15 @@ A failure is eligible for locator repair only when all are true:
   not to match; do not mistake that for the intended element being absent.
   Infer the intended element independently using the exact call site, variable
   name, nearby assertions, and current DOM.
-- For an existing locator whose intent is unclear from its variable name, an
-  adjacent `// @agent-qe-intent: <visible label>` comment may identify the exact
-  intended visible text. Use it only when that exact text maps to one unique
-  visible DOM candidate.
-- If source/test context clearly establishes that the locator check itself is
-  obsolete or unrelated to the current behavior, and the local locator
-  declaration has the explicit `// @agent-qe-obsolete-locator` marker
-  immediately above it, automatically comment out only that declaration and
-  directly associated assertion line(s), then skip that exact assertion in the
-  active test and continue without closing the browser. The marker is required
-  human authorization, not proof by itself. Never infer irrelevance solely
-  because an expected element is absent from the DOM. If intent is ambiguous,
-  the marker is absent, evidence is incomplete, or the source is not a uniquely
-  identified local locator plus assertion, leave it unchanged and fail.
-- Append an audit entry containing the test, source path, selector, reason, and
-  exact commented lines to `.agent_qe_locator_comments.log`. This is a local,
-  gitignored log and must not be committed or included in a PR.
-- If `.agent_qe_locator_comments.log` does not exist, the runtime agent
-  implementation must create it when appending the first audit entry. Do not
-  require a pre-created log file, and surface any file-creation or write error
-  instead of silently skipping the audit.
-- **Prerequisite:** the runtime that invokes this policy must provide an
-  executable filesystem-write mechanism (for example, reporter code or an
-  explicitly available file-writing tool) with permission to create files in
-  the project. This Markdown file is instructions only and cannot create files
-  by itself. If no such mechanism is available, do not claim the audit log was
-  created; report the missing prerequisite and stop the auto-comment operation.
+- Infer intent from ordinary test/source context: the exact failed call site,
+  variable or property name, nearby assertions, test title, page-object usage,
+  and current DOM. Contributors must not need special comments, annotations,
+  or naming conventions for the workflow to run.
+- If the intended element cannot be identified uniquely, or is absent from the
+  DOM, do not call the locator obsolete and do not edit or skip the check.
+  Preserve the failure for human review. Removing or disabling an obsolete
+  check is a business/test change and requires an explicit developer choice in
+  the business-options workflow.
 
 ### Business-logic or test failure
 
@@ -213,12 +198,11 @@ unresolved business/test failure.
    edits from the current file; never apply either choice automatically.
 6. For each option, describe its behavioral consequence and the exact proposed
    source change. Do not present speculation as an authoritative requirement.
-7. Wait for the developer's explicit choice. In an interactive terminal, accept
-   a listed option ID or 0 to cancel. In a non-interactive terminal, accept the
-   explicitly supplied `AGENT_QE_OPTION` environment variable only when it is
-   0 or a listed option ID; consume it once and never carry it into a verification
-   rerun. Missing/invalid selection or unavailable evidence means no business
-   edit.
+7. Wait for the developer's explicit choice. In an interactive terminal,
+   accept a listed option ID or 0 to cancel. If no interactive terminal is
+   available, retain the pending failure and make no edit; never use an
+   undocumented source annotation or environment variable as a substitute for
+   the developer's choice.
 8. Apply only the selected change. Confirm the target file and exact source
    range still match; if not, stop and regenerate choices from current evidence.
 
@@ -231,10 +215,8 @@ Clear locator failures with a uniquely identified intended element continue to
 be repaired automatically under the locator rules. If safe repair is not
 possible, leave the locator and test unchanged and fail; do not turn an
 unresolved locator into a passing test by deleting or commenting out its check.
-The exception is a locator positively classified as an obsolete or irrelevant
-check using source/test evidence: comment out its exact local declaration and
-directly associated assertion(s), write the ignored audit log entry, and rerun.
-Never auto-comment a locator merely because the intended element is missing.
+Any obsolete/irrelevant check must be handled as a business/test change after
+the developer selects an exact proposed edit.
 
 ### Stage C — Resume verification
 
@@ -248,10 +230,23 @@ Never auto-comment a locator merely because the intended element is missing.
 5. Discovery commands, partial selections, retries, or a green process exit by
    themselves are not proof that the required suite passed.
 
-### Stage D — Optional pull request
+### Stage D — Required pull request after a verified repair
 
-Only create or update a pull request when the developer has authorized the
-repository's configured automation and all applicable gates below are met:
+After every distinct repair cycle has passed the applicable verification gates,
+create a pull request or update the existing open pull request for the branch.
+Do not silently skip PR creation just because the repaired source has no net
+diff. A GitHub pull request must contain a branch diff, so when the verified
+repair has no source changes to commit, append one minimal entry for that cycle
+to the runtime-maintained ledger at the end of this file, commit that record,
+and use it as the reviewable PR diff. This agent file is the only Markdown file
+for this workflow; do not create or reference a separate history Markdown file.
+The entry may contain only the cycle ID, verification time, branch, and changed
+source paths; never include credentials, page content, failure payloads, or
+source diffs. Do not create a second PR when an open PR already exists for the
+branch; push the verified update to that branch so the existing PR is updated.
+
+Do not raise a PR unless the developer has authorized the repository's
+configured automation and all applicable gates below are met:
 
 - A complete relevant test run passed after the recorded changes.
 - The run executed tests; it was not a list, dry run, or empty selection.
@@ -270,6 +265,9 @@ repository's configured automation and all applicable gates below are met:
 - The remote, base branch, credentials, and repository permissions are
   confirmed. Never print, commit, or expose a credential.
 - Only explicit paths are staged. Never use broad staging such as `git add .`.
+- A no-net-source-diff repair must produce the minimal verified-cycle ledger
+  entry in this file; never attempt an empty commit or claim that a PR was
+  created without confirming its URL.
 - Never force-push, rewrite shared history, merge, or approve a pull request.
 - Report the resulting commit/PR link and what was included. If any operation
   fails, surface the exact failure and preserve recoverable state.
@@ -282,14 +280,17 @@ repository's configured automation and all applicable gates below are met:
   use changed paths and related test titles only; never send source diffs,
   credentials, or test data to create a commit message.
 
-If any gate is unmet, do not attempt the PR. Explain how the developer can
-continue safely.
+If a verification, authorization, branch, credential, or GitHub gate is unmet,
+do not attempt the PR. Explain how the developer can continue safely. A lack of
+source-code diff alone is not a reason to skip the PR; use the verified-cycle
+ledger entry in this file.
 
 ### Stage E — Normal future runs
 
-After the verified change has been reviewed and integrated, ordinary runs
-should behave like standard Playwright runs. Do not create another commit or PR
-unless a new, distinct repair cycle has completed all applicable gates.
+After a verified cycle has been recorded and its PR created or updated,
+ordinary runs should behave like standard Playwright runs. Do not create
+another commit or update a PR for the same cycle; a new distinct verified
+repair cycle gets its own ledger entry here when it has no source diff.
 
 ## 5. Locator-selection policy
 
@@ -421,12 +422,17 @@ If cross-run state is needed:
 
 - Store the minimum information required to resume: failure identity, relative
   source path, line, error summary, and privacy-safe evidence.
+- Associate each repair cycle with a unique ID and the branch on which it
+  started; do not apply pending state or raise a PR from a different branch.
 - Validate the state file's structure and paths before using it.
 - Keep local state out of source control unless the project explicitly requires
   a shared workflow record.
 - Preserve state after cancellation, failed tests, or failed Git operations.
 - Clear state only after the associated correction is verified and the
   configured completion action succeeds.
+- Retain the repair-cycle ID until its source change or no-net-diff ledger
+  record has been committed and the corresponding PR has been created or
+  updated successfully.
 - Ignore state from a different branch, changed failure, or outdated source
   rather than applying it blindly.
 
@@ -450,7 +456,6 @@ Be concise but explicit. Do not claim the product is correct because a test was
 made to pass. Do not conceal uncertainty, failed validation, missing
 credentials, or an incomplete run.
 
-
 ## 10. Completion checklist
 
 Before declaring a repair cycle complete, verify every applicable item:
@@ -464,3 +469,10 @@ Before declaring a repair cycle complete, verify every applicable item:
 - [ ] No unresolved failure or pending decision remains.
 - [ ] Git/PR actions, if authorized, used explicit files and safe branch rules.
 - [ ] The final report accurately describes work, tests, and remaining risks
+
+## Runtime-maintained verified repair-cycle records
+
+The runtime appends an entry here only after a distinct repair cycle passes
+verification and has no net source diff to commit. Keep each entry limited to
+the cycle ID, verification time, branch, and changed source paths. These
+records are audit data, not additional workflow instructions.
