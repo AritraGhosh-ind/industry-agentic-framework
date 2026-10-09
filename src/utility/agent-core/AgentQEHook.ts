@@ -6,7 +6,7 @@ import { execFileSync } from 'node:child_process';
 import { AgentQEGitHub } from './AgentQEGitHub';
 import { BusinessOptions } from './AgentQEBusinessOptions';
 import { LocatorRepair } from './AgentQELocatorRepair';
-import { addChangedFile, lineForSourceFile, normalizePath, playwrightCli, readState, writeState, type AgentState } from './agent-qe-shared';
+import { addChangedFile, currentGitBranch, emptyState, lineForSourceFile, normalizePath, playwrightCli, readState, writeState, type AgentState } from './agent-qe-shared';
 
 export default class AgentQEHook implements Reporter {
   private pendingFailures: Array<{ test: TestCase; result: TestResult }> = [];
@@ -17,7 +17,20 @@ export default class AgentQEHook implements Reporter {
   private readonly git = new AgentQEGitHub();
 
   onBegin(): void {
-    this.hadPendingBusinessAtStart = Boolean(readState().pendingBusiness);
+    const state = readState();
+    const hasRepairState = state.correctionsMade || Boolean(state.pendingBusiness);
+    if (hasRepairState) {
+      const branch = currentGitBranch();
+      if (!state.repairBranch || state.repairBranch !== branch) {
+        console.warn(`[AGENT]: Discarding repair state not associated with the current branch "${branch}".`);
+        writeState(emptyState());
+        this.hadPendingBusinessAtStart = false;
+      } else {
+        this.hadPendingBusinessAtStart = Boolean(state.pendingBusiness);
+      }
+    } else {
+      this.hadPendingBusinessAtStart = false;
+    }
     console.log('🔬 [AGENT SYSTEM]: Monitoring Playwright test outcomes...');
   }
 

@@ -29,13 +29,8 @@ test.describe('Enterprise E2E Authentication Flow Suite', () => {
     const missingProductsHeading = page.getByText("Products", { exact: true });
     await expect(missingProductsHeading).toBeVisible({ timeout: 10000 });
 
-    // @agent-qe-intent: Sauce Labs Backpack
     const missingBackpackName = page.getByText("Sauce Labs Backpack", { exact: true });
     await expect(missingBackpackName).toBeVisible({ timeout: 10000 });
-
-    // @agent-qe-obsolete-locator
-    // const obsoleteRewardsBanner = page.locator('#legacy-rewards-banner');
-    // await expect(obsoleteRewardsBanner).toBeVisible({ timeout: 10000 });
 
     // Intentional business-logic failures: the reporter must stop here and
     // offer human choices instead of silently changing expected behavior.

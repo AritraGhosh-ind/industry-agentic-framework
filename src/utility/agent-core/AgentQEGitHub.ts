@@ -1,14 +1,18 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+import { randomUUID } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
 import * as https from 'node:https';
-import { buildAgentSystemPrompt, openaiClient, projectRoot, stateTrackerFile, type AgentState } from './agent-qe-shared';
+import { buildAgentSystemPrompt, currentGitBranch, openaiClient, orchestratorInstructionsFile, projectRoot, stateTrackerFile, writeState, type AgentState } from './agent-qe-shared';
 
 export class AgentQEGitHub {
   async raisePullRequest(state: AgentState): Promise<void> {
-    const branch = execFileSync('git', ['rev-parse', '--abbrev-ref', 'HEAD'], { encoding: 'utf8' }).trim();
-    if (!branch || branch === 'main' || branch === 'HEAD') {
+    const branch = currentGitBranch();
+    if (branch === 'main') {
       throw new Error(`Refusing to create a PR from branch "${branch}". Check out a feature branch first.`);
+    }
+    if (state.repairBranch && state.repairBranch !== branch) {
+      throw new Error(`Refusing to create a PR for repair state from branch "${state.repairBranch}" while on "${branch}".`);
     }
 
     const remoteUrl = execFileSync('git', ['config', '--get', 'remote.origin.url'], { encoding: 'utf8' }).trim();
@@ -37,7 +41,15 @@ export class AgentQEGitHub {
       }
     }
 
-    const stagedChanges = this.gitPathList(['diff', '--cached', '--name-only', '-z', '--', ...files]);
+    let stagedChanges = this.gitPathList(['diff', '--cached', '--name-only', '-z', '--', ...files]);
+    if (stagedChanges.length === 0) {
+      const historyFile = this.appendVerifiedRepairRecord(state, branch);
+      const relativeHistoryFile = path.relative(projectRoot, historyFile).split(path.sep).join('/');
+      if (!files.includes(relativeHistoryFile)) files.push(relativeHistoryFile);
+      execFileSync('git', ['add', '--', relativeHistoryFile], { stdio: 'inherit' });
+      stagedChanges = this.gitPathList(['diff', '--cached', '--name-only', '-z', '--', ...files]);
+    }
+
     if (stagedChanges.length > 0) {
       const commitMessage = await this.createUserFacingCommitMessage(stagedChanges);
       execFileSync('git', [
@@ -64,7 +76,7 @@ export class AgentQEGitHub {
         throw new Error(`Could not determine whether branch "${branch}" contains commits ahead of origin/main.`);
       }
       if (commitsAheadOfBase === 0) {
-        console.log('[AGENT]: No new changes to commit and no branch commits ahead of origin/main; no PR is needed.');
+        console.log('[AGENT]: This repair cycle is already recorded and integrated; no additional PR is needed.');
         if (fs.existsSync(stateTrackerFile)) fs.unlinkSync(stateTrackerFile);
         return;
       }
@@ -112,6 +124,26 @@ export class AgentQEGitHub {
   private gitPathList(args: string[]): string[] {
     const output = execFileSync('git', args, { cwd: projectRoot });
     return output.toString('utf8').split('\0').filter(Boolean);
+  }
+
+  private appendVerifiedRepairRecord(state: AgentState, branch: string): string {
+    state.repairCycleId ||= randomUUID();
+    writeState(state);
+
+    const historyFile = orchestratorInstructionsFile;
+    const history = fs.readFileSync(historyFile, 'utf8');
+    const ledgerHeading = '## Runtime-maintained verified repair-cycle records';
+    const normalizedHistory = history.replace(/\r\n/g, '\n');
+    if (!normalizedHistory.includes(`\n${ledgerHeading}\n`)) {
+      throw new Error(`The required verified repair-cycle ledger is missing from ${historyFile}.`);
+    }
+    if (!history.includes(`\`${state.repairCycleId}\``)) {
+      const paths = [...new Set(state.changedFiles)].sort();
+      const lineEnding = history.includes('\r\n') ? '\r\n' : '\n';
+      const entry = `${lineEnding}- ${new Date().toISOString()} | cycle \`${state.repairCycleId}\` | branch ${JSON.stringify(branch)} | verified paths ${JSON.stringify(paths)}${lineEnding}`;
+      fs.appendFileSync(historyFile, entry, 'utf8');
+    }
+    return historyFile;
   }
 
   private async createUserFacingCommitMessage(files: string[]): Promise<{ subject: string; body: string }> {
