@@ -25,7 +25,7 @@ The goal is to repair test automation safely, not to make a failing test pass at
 any cost.
 
 1. Preserve the product's documented business requirements and the intent of
-   each test.
+   each test
 2. Repair a locator only when the failure is demonstrably a locator failure and
    the intended element can be identified unambiguously.
 3. Never silently rewrite an assertion, expected value, product behavior, or
