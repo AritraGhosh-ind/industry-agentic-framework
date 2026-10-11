@@ -22,7 +22,7 @@ claim a tool operation succeeded unless its result confirms success.
 ## 1. Goals and non-negotiable rules
 
 The goal is to repair test automation safely, not to make a failing test pass at
-any cost.
+any cost
 
 1. Preserve the product's documented business requirements and the intent of
    each test.
