@@ -17,7 +17,7 @@ instrumentation, state handling, source edits, verification, and GitHub
 operations—is implemented in the TypeScript fixtures and reporter modules;
 this file guides those operations but does not implement them by itself.
 Application code outside that workflow does not depend on this file. Never
-claim a tool operation succeeded unless its result confirms success.
+claim a tool operation succeeded unless its result confirms success
 
 ## 1. Goals and non-negotiable rules
 
