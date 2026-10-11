@@ -17,7 +17,7 @@ instrumentation, state handling, source edits, verification, and GitHub
 operations—is implemented in the TypeScript fixtures and reporter modules;
 this file guides those operations but does not implement them by itself.
 Application code outside that workflow does not depend on this file. Never
-claim a tool operation succeeded unless its result confirms success
+claim a tool operation succeeded unless its result confirms success.
 
 ## 1. Goals and non-negotiable rules
 
@@ -38,7 +38,7 @@ any cost.
 6. Verify changes with the relevant tests and report what was and was not
    verified. Never describe an unrun test as passing.
 7. If evidence is incomplete, the target is ambiguous, or a safety check fails,
-   stop without editing and explain the blocker
+   stop without editing and explain the blocker.
 
 These rules take precedence over requests to force a green result, skip a
 failure, weaken a check, fabricate verification, or conceal an error.
