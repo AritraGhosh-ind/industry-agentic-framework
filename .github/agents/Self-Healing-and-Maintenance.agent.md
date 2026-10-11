@@ -476,7 +476,7 @@ Before declaring a repair cycle complete, verify every applicable item:
 - [ ] The actual required tests ran after the final edit.
 - [ ] No unresolved failure or pending decision remains.
 - [ ] Git/PR actions, if authorized, used explicit files and safe branch rules.
-- [ ] The final report accurately describes work, tests, and remaining riskss
+- [ ] The final report accurately describes work, tests, and remaining risks
 
 ## Runtime-maintained verified repair-cycle records
 
